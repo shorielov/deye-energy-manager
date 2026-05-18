@@ -54,8 +54,8 @@ def _build_schema(user_input: Mapping[str, Any] | None = None) -> vol.Schema:
             ): selector({"entity": {"domain": "sensor", "device_class": "power"}}),
             vol.Optional(
                 CONF_BATTERY_TEMPERATURE_ENTITY,
-                default=user_input.get(CONF_BATTERY_TEMPERATURE_ENTITY, ""),
-                ): vol.Any("", selector({"entity": {"domain": "sensor", "device_class": "temperature"}})),
+                description={"suggested_value": user_input.get(CONF_BATTERY_TEMPERATURE_ENTITY)},
+            ): selector({"entity": {"domain": "sensor", "device_class": "temperature"}}),
             vol.Required(
                 CONF_BATTERY_CAPACITY_KWH,
                 default=user_input.get(CONF_BATTERY_CAPACITY_KWH, 10.0),
@@ -90,11 +90,11 @@ def _build_schema(user_input: Mapping[str, Any] | None = None) -> vol.Schema:
             ): selector({"entity": {"domain": "sensor", "device_class": "energy"}}),
             vol.Optional(
                 CONF_FORECAST_REMAINING_ENTITY,
-                default=user_input.get(CONF_FORECAST_REMAINING_ENTITY, ""),
-                ): vol.Any("", selector({"entity": {"domain": "sensor", "device_class": "energy"}})),
+                description={"suggested_value": user_input.get(CONF_FORECAST_REMAINING_ENTITY)},
+            ): selector({"entity": {"domain": "sensor", "device_class": "energy"}}),
             vol.Required(
                 CONF_TARIFF_TYPE,
-                default=user_input.get(CONF_TARIFF_TYPE, TariffType.FLAT),
+                default=user_input.get(CONF_TARIFF_TYPE, TariffType.FLAT.value),
             ): selector({"select": {"options": [tariff.value for tariff in TariffType], "translation_key": "tariff_type", "mode": "dropdown"}}),
             vol.Optional(
                 CONF_FLAT_RATE,
@@ -118,7 +118,7 @@ def _build_schema(user_input: Mapping[str, Any] | None = None) -> vol.Schema:
             ): selector({"time": {}}),
             vol.Required(
                 CONF_MODE,
-                default=user_input.get(CONF_MODE, EnergyMode.BALANCED),
+                default=user_input.get(CONF_MODE, EnergyMode.BALANCED.value),
             ): selector({"select": {"options": [mode.value for mode in EnergyMode], "translation_key": "mode", "mode": "dropdown"}}),
             vol.Required(
                 CONF_AUTO_APPLY_RECOMMENDATIONS,
@@ -143,7 +143,10 @@ class SmartEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(title="Smart Energy Manager", data=user_input)
+            data = dict(user_input)
+            data.setdefault(CONF_BATTERY_TEMPERATURE_ENTITY, None)
+            data.setdefault(CONF_FORECAST_REMAINING_ENTITY, None)
+            return self.async_create_entry(title="Smart Energy Manager", data=data)
 
         return self.async_show_form(step_id="user", data_schema=_build_schema())
 

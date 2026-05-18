@@ -23,7 +23,6 @@ async def test_user_flow_creates_entry(hass: HomeAssistant) -> None:
         {
             "battery_soc_entity": "sensor.battery_soc",
             "battery_power_entity": "sensor.battery_power",
-            "battery_temperature_entity": "",
             "battery_capacity_kwh": 12.5,
             "pv_power_entity": "sensor.pv_power",
             "pv_generation_today_entity": "sensor.pv_generation_today",
