@@ -1,0 +1,88 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Smart Energy Manager",
+        "description": "Select the source entities and tariff settings used by the recommendation engine.",
+        "data": {
+          "battery_soc_entity": "Battery SOC entity",
+          "battery_power_entity": "Battery power entity",
+          "battery_temperature_entity": "Battery temperature entity",
+          "battery_capacity_kwh": "Battery capacity (kWh)",
+          "pv_power_entity": "PV power entity",
+          "pv_generation_today_entity": "PV generation today entity",
+          "grid_import_entity": "Grid import entity",
+          "grid_export_entity": "Grid export entity",
+          "home_consumption_entity": "Home consumption entity",
+          "forecast_today_entity": "Forecast today entity",
+          "forecast_tomorrow_entity": "Forecast tomorrow entity",
+          "forecast_remaining_entity": "Forecast remaining today entity",
+          "tariff_type": "Tariff type",
+          "flat_rate": "Flat tariff rate",
+          "day_rate": "Day tariff rate",
+          "night_rate": "Night tariff rate",
+          "night_start": "Night tariff start",
+          "night_end": "Night tariff end",
+          "mode": "Default mode",
+          "auto_apply_recommendations": "Auto apply recommendations",
+          "scan_interval_seconds": "Refresh interval (seconds)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Smart Energy Manager Options",
+        "description": "Adjust source entities, tariff settings, and strategy defaults.",
+        "data": {
+          "battery_soc_entity": "Battery SOC entity",
+          "battery_power_entity": "Battery power entity",
+          "battery_temperature_entity": "Battery temperature entity",
+          "battery_capacity_kwh": "Battery capacity (kWh)",
+          "pv_power_entity": "PV power entity",
+          "pv_generation_today_entity": "PV generation today entity",
+          "grid_import_entity": "Grid import entity",
+          "grid_export_entity": "Grid export entity",
+          "home_consumption_entity": "Home consumption entity",
+          "forecast_today_entity": "Forecast today entity",
+          "forecast_tomorrow_entity": "Forecast tomorrow entity",
+          "forecast_remaining_entity": "Forecast remaining today entity",
+          "tariff_type": "Tariff type",
+          "flat_rate": "Flat tariff rate",
+          "day_rate": "Day tariff rate",
+          "night_rate": "Night tariff rate",
+          "night_start": "Night tariff start",
+          "night_end": "Night tariff end",
+          "mode": "Default mode",
+          "auto_apply_recommendations": "Auto apply recommendations",
+          "scan_interval_seconds": "Refresh interval (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "target_soc": {"name": "Target SOC"},
+      "forecast_balance": {"name": "Forecast Balance"},
+      "bad_weather_risk": {"name": "Bad Weather Risk"},
+      "recommended_pv": {"name": "Recommended PV Expansion"},
+      "grid_dependency": {"name": "Grid Dependency"},
+      "energy_score": {"name": "Energy Score"}
+    },
+    "binary_sensor": {
+      "should_charge": {"name": "Should Charge"},
+      "bad_weather": {"name": "Bad Weather"},
+      "energy_deficit": {"name": "Energy Deficit"}
+    },
+    "switch": {
+      "eco_mode": {"name": "ECO Mode"},
+      "winter_mode": {"name": "Winter Mode"},
+      "auto_apply": {"name": "Auto Apply Recommendations"}
+    },
+    "number": {
+      "target_soc": {"name": "Target SOC Override"},
+      "min_soc": {"name": "Minimum SOC Override"}
+    }
+  }
+}

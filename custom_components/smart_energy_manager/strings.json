@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Smart Energy Manager",
+        "description": "Select the source entities and tariff settings used by the recommendation engine."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Smart Energy Manager Options",
+        "description": "Adjust source entities, tariff settings, and strategy defaults."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "target_soc": {"name": "Target SOC"},
+      "forecast_balance": {"name": "Forecast Balance"},
+      "bad_weather_risk": {"name": "Bad Weather Risk"},
+      "recommended_pv": {"name": "Recommended PV Expansion"},
+      "grid_dependency": {"name": "Grid Dependency"},
+      "energy_score": {"name": "Energy Score"}
+    },
+    "binary_sensor": {
+      "should_charge": {"name": "Should Charge"},
+      "bad_weather": {"name": "Bad Weather"},
+      "energy_deficit": {"name": "Energy Deficit"}
+    },
+    "switch": {
+      "eco_mode": {"name": "ECO Mode"},
+      "winter_mode": {"name": "Winter Mode"},
+      "auto_apply": {"name": "Auto Apply Recommendations"}
+    },
+    "number": {
+      "target_soc": {"name": "Target SOC Override"},
+      "min_soc": {"name": "Minimum SOC Override"}
+    }
+  }
+}

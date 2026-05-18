@@ -1,0 +1,25 @@
+recompute:
+  name: Recompute recommendations
+  description: Force the coordinator to refresh source entities and recalculate recommendation entities.
+
+clear_history:
+  name: Clear history
+  description: Clear the in-memory telemetry history used for short-term analysis.
+
+set_mode:
+  name: Set mode
+  description: Update the active energy strategy mode.
+  fields:
+    mode:
+      name: Mode
+      description: New operating mode.
+      example: winter
+      required: true
+      selector:
+        select:
+          options:
+            - eco
+            - winter
+            - autonomous
+            - backup
+            - balanced

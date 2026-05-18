@@ -1,0 +1,4 @@
+pytest-homeassistant-custom-component==0.13.109
+ruff>=0.11.8
+mypy>=1.15.0
+tzdata>=2024.1

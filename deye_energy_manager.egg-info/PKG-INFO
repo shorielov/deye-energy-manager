@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: deye-energy-manager
+Version: 0.1.0
+Summary: Home Assistant custom integration for energy optimization recommendations
+Requires-Python: >=3.11
