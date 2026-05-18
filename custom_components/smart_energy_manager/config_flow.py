@@ -7,6 +7,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.helpers.selector import selector
 
 from .const import (
     CONF_AUTO_APPLY_RECOMMENDATIONS,
@@ -45,88 +46,88 @@ def _build_schema(user_input: Mapping[str, Any] | None = None) -> vol.Schema:
         {
             vol.Required(
                 CONF_BATTERY_SOC_ENTITY,
-                default=user_input.get(CONF_BATTERY_SOC_ENTITY, "sensor.battery_soc"),
-            ): str,
+                default=user_input.get(CONF_BATTERY_SOC_ENTITY),
+            ): selector({"entity": {"domain": "sensor", "device_class": "battery"}}),
             vol.Required(
                 CONF_BATTERY_POWER_ENTITY,
-                default=user_input.get(CONF_BATTERY_POWER_ENTITY, "sensor.battery_power"),
-            ): str,
+                default=user_input.get(CONF_BATTERY_POWER_ENTITY),
+            ): selector({"entity": {"domain": "sensor", "device_class": "power"}}),
             vol.Optional(
                 CONF_BATTERY_TEMPERATURE_ENTITY,
                 default=user_input.get(CONF_BATTERY_TEMPERATURE_ENTITY, ""),
-            ): str,
+                ): vol.Any("", selector({"entity": {"domain": "sensor", "device_class": "temperature"}})),
             vol.Required(
                 CONF_BATTERY_CAPACITY_KWH,
                 default=user_input.get(CONF_BATTERY_CAPACITY_KWH, 10.0),
-            ): vol.Coerce(float),
+            ): selector({"number": {"min": 1, "max": 200, "step": 0.1, "unit_of_measurement": "kWh", "mode": "box"}}),
             vol.Required(
                 CONF_PV_POWER_ENTITY,
-                default=user_input.get(CONF_PV_POWER_ENTITY, "sensor.pv_power"),
-            ): str,
+                default=user_input.get(CONF_PV_POWER_ENTITY),
+            ): selector({"entity": {"domain": "sensor", "device_class": "power"}}),
             vol.Required(
                 CONF_PV_GENERATION_TODAY_ENTITY,
-                default=user_input.get(CONF_PV_GENERATION_TODAY_ENTITY, "sensor.pv_generation_today"),
-            ): str,
+                default=user_input.get(CONF_PV_GENERATION_TODAY_ENTITY),
+            ): selector({"entity": {"domain": "sensor", "device_class": "energy"}}),
             vol.Required(
                 CONF_GRID_IMPORT_ENTITY,
-                default=user_input.get(CONF_GRID_IMPORT_ENTITY, "sensor.grid_import"),
-            ): str,
+                default=user_input.get(CONF_GRID_IMPORT_ENTITY),
+            ): selector({"entity": {"domain": "sensor", "device_class": "energy"}}),
             vol.Required(
                 CONF_GRID_EXPORT_ENTITY,
-                default=user_input.get(CONF_GRID_EXPORT_ENTITY, "sensor.grid_export"),
-            ): str,
+                default=user_input.get(CONF_GRID_EXPORT_ENTITY),
+            ): selector({"entity": {"domain": "sensor", "device_class": "energy"}}),
             vol.Required(
                 CONF_HOME_CONSUMPTION_ENTITY,
-                default=user_input.get(CONF_HOME_CONSUMPTION_ENTITY, "sensor.home_consumption"),
-            ): str,
+                default=user_input.get(CONF_HOME_CONSUMPTION_ENTITY),
+            ): selector({"entity": {"domain": "sensor", "device_class": "power"}}),
             vol.Required(
                 CONF_FORECAST_TODAY_ENTITY,
-                default=user_input.get(CONF_FORECAST_TODAY_ENTITY, "sensor.solar_forecast_today"),
-            ): str,
+                default=user_input.get(CONF_FORECAST_TODAY_ENTITY),
+            ): selector({"entity": {"domain": "sensor", "device_class": "energy"}}),
             vol.Required(
                 CONF_FORECAST_TOMORROW_ENTITY,
-                default=user_input.get(CONF_FORECAST_TOMORROW_ENTITY, "sensor.solar_forecast_tomorrow"),
-            ): str,
+                default=user_input.get(CONF_FORECAST_TOMORROW_ENTITY),
+            ): selector({"entity": {"domain": "sensor", "device_class": "energy"}}),
             vol.Optional(
                 CONF_FORECAST_REMAINING_ENTITY,
-                default=user_input.get(CONF_FORECAST_REMAINING_ENTITY, "sensor.solar_forecast_remaining"),
-            ): str,
+                default=user_input.get(CONF_FORECAST_REMAINING_ENTITY, ""),
+                ): vol.Any("", selector({"entity": {"domain": "sensor", "device_class": "energy"}})),
             vol.Required(
                 CONF_TARIFF_TYPE,
                 default=user_input.get(CONF_TARIFF_TYPE, TariffType.FLAT),
-            ): vol.In([tariff.value for tariff in TariffType]),
+            ): selector({"select": {"options": [tariff.value for tariff in TariffType], "translation_key": "tariff_type", "mode": "dropdown"}}),
             vol.Optional(
                 CONF_FLAT_RATE,
                 default=user_input.get(CONF_FLAT_RATE, 0.0),
-            ): vol.Coerce(float),
+            ): selector({"number": {"min": 0, "step": 0.01, "unit_of_measurement": "UAH/kWh", "mode": "box"}}),
             vol.Optional(
                 CONF_DAY_RATE,
                 default=user_input.get(CONF_DAY_RATE, 0.0),
-            ): vol.Coerce(float),
+            ): selector({"number": {"min": 0, "step": 0.01, "unit_of_measurement": "UAH/kWh", "mode": "box"}}),
             vol.Optional(
                 CONF_NIGHT_RATE,
                 default=user_input.get(CONF_NIGHT_RATE, 0.0),
-            ): vol.Coerce(float),
+            ): selector({"number": {"min": 0, "step": 0.01, "unit_of_measurement": "UAH/kWh", "mode": "box"}}),
             vol.Optional(
                 CONF_NIGHT_START,
                 default=user_input.get(CONF_NIGHT_START, "23:00:00"),
-            ): str,
+            ): selector({"time": {}}),
             vol.Optional(
                 CONF_NIGHT_END,
                 default=user_input.get(CONF_NIGHT_END, "07:00:00"),
-            ): str,
+            ): selector({"time": {}}),
             vol.Required(
                 CONF_MODE,
                 default=user_input.get(CONF_MODE, EnergyMode.BALANCED),
-            ): vol.In([mode.value for mode in EnergyMode]),
+            ): selector({"select": {"options": [mode.value for mode in EnergyMode], "translation_key": "mode", "mode": "dropdown"}}),
             vol.Required(
                 CONF_AUTO_APPLY_RECOMMENDATIONS,
                 default=user_input.get(CONF_AUTO_APPLY_RECOMMENDATIONS, False),
-            ): bool,
+            ): selector({"boolean": {}}),
             vol.Required(
                 CONF_SCAN_INTERVAL_SECONDS,
                 default=user_input.get(CONF_SCAN_INTERVAL_SECONDS, DEFAULT_SCAN_INTERVAL_SECONDS),
-            ): vol.All(vol.Coerce(int), vol.Range(min=30, max=3600)),
+            ): selector({"number": {"min": 30, "max": 3600, "step": 10, "unit_of_measurement": "s", "mode": "box"}}),
         }
     )
 

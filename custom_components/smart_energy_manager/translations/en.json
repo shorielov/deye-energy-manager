@@ -61,6 +61,23 @@
       }
     }
   },
+  "selector": {
+    "tariff_type": {
+      "options": {
+        "flat": "Flat Rate",
+        "dual": "Dual Rate (Day/Night)"
+      }
+    },
+    "mode": {
+      "options": {
+        "eco": "ECO",
+        "winter": "Winter",
+        "autonomous": "Autonomous",
+        "backup": "Backup",
+        "balanced": "Balanced"
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "target_soc": {"name": "Target SOC"},
