@@ -9,7 +9,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 
 from custom_components.smart_energy_manager.const import DOMAIN, ConsumptionSource
-from custom_components.smart_energy_manager.coordinator import SmartEnergyCoordinator
+from custom_components.smart_energy_manager.coordinator import SmartEnergyCoordinator, _float_state
 from custom_components.smart_energy_manager.models import TelemetrySnapshot
 
 
@@ -149,8 +149,10 @@ async def test_recommendation_without_consumption_data(
     coordinator: SmartEnergyCoordinator = hass.data[DOMAIN][setup_integration.entry_id]
     coordinator._telemetry_history.clear()
 
-    # Make home_consumption entity unavailable so no valid history and kw=None
+    # Disable all consumption inputs so every cascade branch returns None
     hass.states.async_set("sensor.home_consumption", "unavailable")
+    hass.states.async_set("sensor.today_load_consumption", "unavailable")
+    hass.states.async_set("sensor.smart_load_today", "unavailable")
 
     await coordinator.async_refresh()
     await hass.async_block_till_done()
@@ -159,7 +161,7 @@ async def test_recommendation_without_consumption_data(
     recommendation = coordinator.data.recommendation
 
     assert forecast.consumption_tomorrow_kwh is None
-    # Both consumption sources are None, so balance cannot be calculated
+    # All consumption sources are None, so balance cannot be calculated
     assert recommendation.expected_balance_kwh is None
 
 
@@ -256,3 +258,68 @@ async def test_no_stats_no_history_source_is_none(
     forecast = coordinator.data.forecast
     assert forecast.consumption_tomorrow_kwh is None
     assert forecast.consumption_source == ConsumptionSource.NONE
+
+
+# ---------------------------------------------------------------------------
+# Balance fallback: live-counter extrapolation
+# ---------------------------------------------------------------------------
+
+
+async def test_recommendation_uses_live_counter_extrapolation(
+    hass: HomeAssistant, setup_integration
+) -> None:
+    """When no consumption estimate is available, extrapolate from today\'s live counter."""
+
+    coordinator: SmartEnergyCoordinator = hass.data[DOMAIN][setup_integration.entry_id]
+    coordinator._telemetry_history.clear()
+    coordinator._consumption_forecaster.async_estimate = AsyncMock(return_value=(None, 0.0))
+
+    # No power sensor → no power-history path
+    hass.states.async_set("sensor.home_consumption", "unavailable")
+    # Set partial-day counters: live_today = 6.0 - 1.0 = 5.0 kWh at noon
+    hass.states.async_set("sensor.today_load_consumption", "6.0")
+    hass.states.async_set("sensor.smart_load_today", "1.0")
+
+    # Freeze local time at noon: hours_elapsed = 12 → proxy = 5.0 * 24 / 12 = 10.0
+    # forecast.tomorrow_kwh = 4.0 (fixture) → expected_balance = 4.0 - 10.0 = -6.0
+    noon = datetime(2026, 5, 19, 12, 0, 0, tzinfo=UTC)
+    with patch("homeassistant.util.dt.now", return_value=noon):
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+
+    assert coordinator.data.recommendation.expected_balance_kwh == pytest.approx(-6.0, abs=0.01)
+
+
+# ---------------------------------------------------------------------------
+# Unit conversion in _float_state
+# ---------------------------------------------------------------------------
+
+
+async def test_float_state_normalizes_w_to_kw(
+    hass: HomeAssistant, setup_integration
+) -> None:
+    """_float_state should convert a W sensor to kW when expected_unit='kW'."""
+
+    hass.states.async_set("sensor.test_power", "1500", {"unit_of_measurement": "W"})
+    result = _float_state(hass, "sensor.test_power", expected_unit="kW")
+    assert result == pytest.approx(1.5, abs=1e-6)
+
+
+async def test_float_state_normalizes_wh_to_kwh(
+    hass: HomeAssistant, setup_integration
+) -> None:
+    """_float_state should convert a Wh sensor to kWh when expected_unit='kWh'."""
+
+    hass.states.async_set("sensor.test_energy", "8500", {"unit_of_measurement": "Wh"})
+    result = _float_state(hass, "sensor.test_energy", expected_unit="kWh")
+    assert result == pytest.approx(8.5, abs=1e-6)
+
+
+async def test_float_state_no_unit_passthrough(
+    hass: HomeAssistant, setup_integration
+) -> None:
+    """_float_state should return raw value when entity has no unit_of_measurement."""
+
+    hass.states.async_set("sensor.test_unitless", "42.5")
+    result = _float_state(hass, "sensor.test_unitless", expected_unit="kW")
+    assert result == pytest.approx(42.5, abs=1e-6)

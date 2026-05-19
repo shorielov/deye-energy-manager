@@ -11,6 +11,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_BATTERY_CAPACITY_KWH,
@@ -52,9 +53,24 @@ from .models import BatteryConfig, EnergyState, ForecastSnapshot, Recommendation
 
 _LOGGER = logging.getLogger(__name__)
 
+# Unit-conversion scale factors to normalise sensor values to kW or kWh.
+_POWER_SCALE: dict[str, float] = {"mW": 1e-6, "W": 1e-3, "kW": 1.0, "MW": 1e3}
+_ENERGY_SCALE: dict[str, float] = {"Wh": 1e-3, "kWh": 1.0, "MWh": 1e3}
+_UNIT_SCALE: dict[str, dict[str, float]] = {"kW": _POWER_SCALE, "kWh": _ENERGY_SCALE}
 
-def _float_state(hass: HomeAssistant, entity_id: str | None) -> float | None:
-    """Read a state and coerce it to float."""
+
+def _float_state(
+    hass: HomeAssistant,
+    entity_id: str | None,
+    expected_unit: str | None = None,
+) -> float | None:
+    """Read a state and coerce it to float, converting units when *expected_unit* is given.
+
+    When *expected_unit* is ``"kW"`` or ``"kWh"``, the entity's
+    ``unit_of_measurement`` attribute is read and the value is scaled to the
+    expected unit (e.g. ``W → kW``, ``Wh → kWh``).  Entities that report no
+    unit, or an unrecognised unit, are returned as-is with a debug log.
+    """
 
     if not entity_id:
         return None
@@ -64,10 +80,33 @@ def _float_state(hass: HomeAssistant, entity_id: str | None) -> float | None:
         return None
 
     try:
-        return float(state.state)
+        value = float(state.state)
     except ValueError:
         _LOGGER.debug("Unable to parse %s=%s as float", entity_id, state.state)
         return None
+
+    if expected_unit is None:
+        return value
+
+    actual_unit: str | None = state.attributes.get("unit_of_measurement")
+    if actual_unit is None or actual_unit == expected_unit:
+        return value
+
+    scale_map = _UNIT_SCALE.get(expected_unit)
+    if scale_map is None:
+        return value
+
+    factor = scale_map.get(actual_unit)
+    if factor is None:
+        _LOGGER.debug(
+            "Unknown unit '%s' for %s (expected %s), using raw value",
+            actual_unit,
+            entity_id,
+            expected_unit,
+        )
+        return value
+
+    return value * factor
 
 
 class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
@@ -100,16 +139,16 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
 
         telemetry = TelemetrySnapshot(
             battery_soc=_float_state(self.hass, self._get_value(CONF_BATTERY_SOC_ENTITY)),
-            battery_power_kw=_float_state(self.hass, self._get_value(CONF_BATTERY_POWER_ENTITY)),
+            battery_power_kw=_float_state(self.hass, self._get_value(CONF_BATTERY_POWER_ENTITY), "kW"),
             battery_temperature_c=_float_state(self.hass, self._get_value(CONF_BATTERY_TEMPERATURE_ENTITY))
             or DEFAULT_BATTERY_TEMPERATURE_C,
-            pv_power_kw=_float_state(self.hass, self._get_value(CONF_PV_POWER_ENTITY)),
-            pv_generation_today_kwh=_float_state(self.hass, self._get_value(CONF_PV_GENERATION_TODAY_ENTITY)),
-            grid_import_kwh=_float_state(self.hass, self._get_value(CONF_GRID_IMPORT_ENTITY)),
-            grid_export_kwh=_float_state(self.hass, self._get_value(CONF_GRID_EXPORT_ENTITY)),
-            home_consumption_kw=_float_state(self.hass, self._get_value(CONF_HOME_CONSUMPTION_ENTITY)),
-            today_load_consumption_kwh=_float_state(self.hass, self._get_value(CONF_TODAY_LOAD_CONSUMPTION_ENTITY)),
-            smart_load_today_kwh=_float_state(self.hass, self._get_value(CONF_SMART_LOAD_TODAY_ENTITY)),
+            pv_power_kw=_float_state(self.hass, self._get_value(CONF_PV_POWER_ENTITY), "kW"),
+            pv_generation_today_kwh=_float_state(self.hass, self._get_value(CONF_PV_GENERATION_TODAY_ENTITY), "kWh"),
+            grid_import_kwh=_float_state(self.hass, self._get_value(CONF_GRID_IMPORT_ENTITY), "kWh"),
+            grid_export_kwh=_float_state(self.hass, self._get_value(CONF_GRID_EXPORT_ENTITY), "kWh"),
+            home_consumption_kw=_float_state(self.hass, self._get_value(CONF_HOME_CONSUMPTION_ENTITY), "kW"),
+            today_load_consumption_kwh=_float_state(self.hass, self._get_value(CONF_TODAY_LOAD_CONSUMPTION_ENTITY), "kWh"),
+            smart_load_today_kwh=_float_state(self.hass, self._get_value(CONF_SMART_LOAD_TODAY_ENTITY), "kWh"),
             updated_at=datetime.now(UTC),
         )
 
@@ -153,9 +192,9 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
         consumption_today = live_baseline_today if live_baseline_today is not None else pw_today
 
         forecast = ForecastSnapshot(
-            today_kwh=_float_state(self.hass, self._get_value(CONF_FORECAST_TODAY_ENTITY)),
-            tomorrow_kwh=_float_state(self.hass, self._get_value(CONF_FORECAST_TOMORROW_ENTITY)),
-            remaining_today_kwh=_float_state(self.hass, self._get_value(CONF_FORECAST_REMAINING_ENTITY)),
+            today_kwh=_float_state(self.hass, self._get_value(CONF_FORECAST_TODAY_ENTITY), "kWh"),
+            tomorrow_kwh=_float_state(self.hass, self._get_value(CONF_FORECAST_TOMORROW_ENTITY), "kWh"),
+            remaining_today_kwh=_float_state(self.hass, self._get_value(CONF_FORECAST_REMAINING_ENTITY), "kWh"),
             consumption_today_kwh=consumption_today,
             consumption_tomorrow_kwh=consumption_tomorrow,
             consumption_confidence=consumption_confidence,
@@ -226,10 +265,15 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
         min_soc = self._safe_int(self._get_value(CONF_MIN_SOC_OVERRIDE)) or DEFAULT_MIN_SOC
         expected_balance = None
         if forecast.tomorrow_kwh is not None:
-            if forecast.consumption_tomorrow_kwh is not None:
-                expected_balance = forecast.tomorrow_kwh - forecast.consumption_tomorrow_kwh
-            elif telemetry.home_consumption_kw is not None:
-                expected_balance = forecast.tomorrow_kwh - telemetry.home_consumption_kw * 24
+            consumption_proxy = forecast.consumption_tomorrow_kwh
+            if consumption_proxy is None and telemetry.today_load_consumption_kwh is not None:
+                smart = telemetry.smart_load_today_kwh or 0.0
+                live_today = max(telemetry.today_load_consumption_kwh - smart, 0.0)
+                now = dt_util.now()
+                hours_elapsed = max(now.hour + now.minute / 60.0, 2.0)
+                consumption_proxy = live_today * 24.0 / hours_elapsed
+            if consumption_proxy is not None:
+                expected_balance = forecast.tomorrow_kwh - consumption_proxy
 
         should_charge = bool(
             forecast.tomorrow_kwh is not None
