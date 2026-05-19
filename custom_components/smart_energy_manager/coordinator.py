@@ -109,18 +109,23 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
         if telemetry.battery_soc is None:
             raise UpdateFailed("Battery SOC entity returned no usable state")
 
+        self._telemetry_history.append(telemetry)
+
+        consumption_today, consumption_tomorrow, consumption_confidence = self._estimate_consumption_forecast()
+
         forecast = ForecastSnapshot(
             today_kwh=_float_state(self.hass, self._get_value(CONF_FORECAST_TODAY_ENTITY)),
             tomorrow_kwh=_float_state(self.hass, self._get_value(CONF_FORECAST_TOMORROW_ENTITY)),
             remaining_today_kwh=_float_state(self.hass, self._get_value(CONF_FORECAST_REMAINING_ENTITY)),
+            consumption_today_kwh=consumption_today,
+            consumption_tomorrow_kwh=consumption_tomorrow,
+            consumption_confidence=consumption_confidence,
         )
         forecast = replace(
             forecast,
             confidence=self._estimate_forecast_confidence(forecast),
             degrading=self._is_forecast_degrading(forecast),
         )
-
-        self._telemetry_history.append(telemetry)
 
         recommendation = self._build_placeholder_recommendation(telemetry, forecast)
         return EnergyState(
@@ -179,8 +184,11 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
         target_soc = self._safe_int(self._get_value(CONF_TARGET_SOC_OVERRIDE)) or DEFAULT_TARGET_SOC
         min_soc = self._safe_int(self._get_value(CONF_MIN_SOC_OVERRIDE)) or DEFAULT_MIN_SOC
         expected_balance = None
-        if forecast.tomorrow_kwh is not None and telemetry.home_consumption_kw is not None:
-            expected_balance = forecast.tomorrow_kwh - telemetry.home_consumption_kw * 24
+        if forecast.tomorrow_kwh is not None:
+            if forecast.consumption_tomorrow_kwh is not None:
+                expected_balance = forecast.tomorrow_kwh - forecast.consumption_tomorrow_kwh
+            elif telemetry.home_consumption_kw is not None:
+                expected_balance = forecast.tomorrow_kwh - telemetry.home_consumption_kw * 24
 
         should_charge = bool(
             forecast.tomorrow_kwh is not None
@@ -201,6 +209,45 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             energy_deficit=bool(expected_balance is not None and expected_balance < 0),
             messages=["Decision engine placeholder output"],
         )
+
+    def _estimate_consumption_forecast(self) -> tuple[float | None, float | None, float | None]:
+        """Estimate daily home consumption (kWh) from telemetry history.
+
+        Uses hourly averages from ``_telemetry_history`` when multiple hours
+        are available. Falls back to a conservative estimate when history is
+        sparse. Returns ``(today_kwh, tomorrow_kwh, confidence)``.
+        """
+
+        valid = [
+            s
+            for s in self._telemetry_history
+            if s.home_consumption_kw is not None and s.updated_at is not None
+        ]
+        if not valid:
+            return None, None, None
+
+        hourly: dict[int, list[float]] = {}
+        for snap in valid:
+            h = snap.updated_at.hour
+            if h not in hourly:
+                hourly[h] = []
+            hourly[h].append(snap.home_consumption_kw)  # type: ignore[arg-type]
+
+        available_hours = len(hourly)
+        overall_mean = sum(s.home_consumption_kw for s in valid) / len(valid)  # type: ignore[misc]
+
+        if available_hours < 2:
+            # Sparse: conservative estimate capped at 50 % confidence
+            daily_kwh = round(overall_mean * 24 * 0.9, 3)
+            confidence = round(available_hours / 24 * 0.5, 2)
+            return daily_kwh, daily_kwh, confidence
+
+        hourly_means = {h: sum(v) / len(v) for h, v in hourly.items()}
+        daily_kwh = round(
+            sum(hourly_means.get(h, overall_mean) for h in range(24)), 3
+        )
+        confidence = round(available_hours / 24, 2)
+        return daily_kwh, daily_kwh, confidence
 
     def _estimate_forecast_confidence(self, forecast: ForecastSnapshot) -> float:
         """Estimate confidence from forecast completeness."""

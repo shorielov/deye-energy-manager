@@ -13,6 +13,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     ATTR_ACTIVE_MODE,
+    ATTR_CONSUMPTION_CONFIDENCE,
+    ATTR_CONSUMPTION_TODAY_KWH,
+    ATTR_CONSUMPTION_TOMORROW_KWH,
     ATTR_ESTIMATED_SAVINGS,
     ATTR_EXPECTED_BALANCE,
     ATTR_FORECAST_CONFIDENCE,
@@ -111,12 +114,16 @@ class SmartEnergySensor(SmartEnergyEntity, SensorEntity):
         """Return extra attributes for debugging and UI."""
 
         recommendation = self.coordinator.data.recommendation
+        forecast = self.coordinator.data.forecast
         return {
             ATTR_ESTIMATED_SAVINGS: recommendation.estimated_savings,
             ATTR_REASON_CODES: [code.value for code in recommendation.reason_codes],
-            ATTR_FORECAST_CONFIDENCE: self.coordinator.data.forecast.confidence,
+            ATTR_FORECAST_CONFIDENCE: forecast.confidence,
             ATTR_EXPECTED_BALANCE: recommendation.expected_balance_kwh,
             ATTR_ACTIVE_MODE: recommendation.active_mode.value,
+            ATTR_CONSUMPTION_TODAY_KWH: forecast.consumption_today_kwh,
+            ATTR_CONSUMPTION_TOMORROW_KWH: forecast.consumption_tomorrow_kwh,
+            ATTR_CONSUMPTION_CONFIDENCE: forecast.consumption_confidence,
         }
 
 

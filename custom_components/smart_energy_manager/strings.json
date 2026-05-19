@@ -32,7 +32,11 @@
       }
     }
   },
-  "entity": {
+  "entity_component": {
+    "home_consumption": {
+      "name": "Home Load Power"
+    }
+  }
     "sensor": {
       "target_soc": {"name": "Target SOC"},
       "forecast_balance": {"name": "Forecast Balance"},

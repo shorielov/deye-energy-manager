@@ -53,6 +53,9 @@ class ForecastSnapshot:
     remaining_today_kwh: float | None = None
     confidence: float | None = None
     degrading: bool = False
+    consumption_today_kwh: float | None = None
+    consumption_tomorrow_kwh: float | None = None
+    consumption_confidence: float | None = None
 
 
 @dataclass(slots=True)
