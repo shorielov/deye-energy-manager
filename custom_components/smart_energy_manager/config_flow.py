@@ -30,7 +30,9 @@ from .const import (
     CONF_PV_GENERATION_TODAY_ENTITY,
     CONF_PV_POWER_ENTITY,
     CONF_SCAN_INTERVAL_SECONDS,
+    CONF_SMART_LOAD_TODAY_ENTITY,
     CONF_TARIFF_TYPE,
+    CONF_TODAY_LOAD_CONSUMPTION_ENTITY,
     DEFAULT_SCAN_INTERVAL_SECONDS,
     DOMAIN,
     EnergyMode,
@@ -80,6 +82,14 @@ def _build_schema(user_input: Mapping[str, Any] | None = None) -> vol.Schema:
                 CONF_HOME_CONSUMPTION_ENTITY,
                 default=user_input.get(CONF_HOME_CONSUMPTION_ENTITY),
             ): selector({"entity": {"domain": "sensor", "device_class": "power"}}),
+            vol.Optional(
+                CONF_TODAY_LOAD_CONSUMPTION_ENTITY,
+                description={"suggested_value": user_input.get(CONF_TODAY_LOAD_CONSUMPTION_ENTITY)},
+            ): selector({"entity": {"domain": "sensor", "device_class": "energy"}}),
+            vol.Optional(
+                CONF_SMART_LOAD_TODAY_ENTITY,
+                description={"suggested_value": user_input.get(CONF_SMART_LOAD_TODAY_ENTITY)},
+            ): selector({"entity": {"domain": "sensor", "device_class": "energy"}}),
             vol.Required(
                 CONF_FORECAST_TODAY_ENTITY,
                 default=user_input.get(CONF_FORECAST_TODAY_ENTITY),
@@ -146,6 +156,8 @@ class SmartEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data = dict(user_input)
             data.setdefault(CONF_BATTERY_TEMPERATURE_ENTITY, None)
             data.setdefault(CONF_FORECAST_REMAINING_ENTITY, None)
+            data.setdefault(CONF_TODAY_LOAD_CONSUMPTION_ENTITY, None)
+            data.setdefault(CONF_SMART_LOAD_TODAY_ENTITY, None)
             return self.async_create_entry(title="Smart Energy Manager", data=data)
 
         return self.async_show_form(step_id="user", data_schema=_build_schema())

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
 
-from custom_components.smart_energy_manager.const import DOMAIN
+from custom_components.smart_energy_manager.const import DOMAIN, ConsumptionSource
 from custom_components.smart_energy_manager.coordinator import SmartEnergyCoordinator
 from custom_components.smart_energy_manager.models import TelemetrySnapshot
 
@@ -160,3 +161,98 @@ async def test_recommendation_without_consumption_data(
     assert forecast.consumption_tomorrow_kwh is None
     # Both consumption sources are None, so balance cannot be calculated
     assert recommendation.expected_balance_kwh is None
+
+
+# ---------------------------------------------------------------------------
+# Statistics-based priority chain
+# ---------------------------------------------------------------------------
+
+
+async def test_statistics_path_sets_source_and_tomorrow(
+    hass: HomeAssistant, setup_integration
+) -> None:
+    """When the statistics forecaster returns a value it should be preferred."""
+
+    coordinator: SmartEnergyCoordinator = hass.data[DOMAIN][setup_integration.entry_id]
+
+    # Patch the forecaster to return a known statistics result
+    coordinator._consumption_forecaster.async_estimate = AsyncMock(
+        return_value=(13.5, 0.9)
+    )
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    forecast = coordinator.data.forecast
+    assert forecast.consumption_tomorrow_kwh == pytest.approx(13.5, abs=0.01)
+    assert forecast.consumption_confidence == pytest.approx(0.9, abs=0.01)
+    assert forecast.consumption_source == ConsumptionSource.STATISTICS
+
+
+async def test_power_history_fallback_when_stats_empty(
+    hass: HomeAssistant, setup_integration
+) -> None:
+    """Power-history path should be used when statistics returns (None, 0.0)."""
+
+    coordinator: SmartEnergyCoordinator = hass.data[DOMAIN][setup_integration.entry_id]
+    coordinator._telemetry_history.clear()
+
+    # Statistics return nothing
+    coordinator._consumption_forecaster.async_estimate = AsyncMock(
+        return_value=(None, 0.0)
+    )
+
+    # Build 24 h of power history so _estimate_consumption_forecast has data
+    base = datetime(2026, 5, 19, 0, 0, 0, tzinfo=UTC)
+    for h in range(24):
+        coordinator._telemetry_history.append(
+            TelemetrySnapshot(home_consumption_kw=0.5, updated_at=base.replace(hour=h))
+        )
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    forecast = coordinator.data.forecast
+    assert forecast.consumption_tomorrow_kwh is not None
+    assert forecast.consumption_source == ConsumptionSource.POWER_HISTORY
+
+
+async def test_live_baseline_overrides_today_estimate(
+    hass: HomeAssistant, setup_integration
+) -> None:
+    """Live energy counters (total − smart) should override today's power-based estimate."""
+
+    coordinator: SmartEnergyCoordinator = hass.data[DOMAIN][setup_integration.entry_id]
+    coordinator._consumption_forecaster.async_estimate = AsyncMock(
+        return_value=(None, 0.0)
+    )
+
+    # setup_integration sets today_load=12.5 kWh, smart_load=2.5 kWh → baseline=10.0
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    # Live baseline = 12.5 - 2.5 = 10.0
+    assert coordinator.data.forecast.consumption_today_kwh == pytest.approx(10.0, abs=0.01)
+    assert coordinator.data.telemetry.today_load_consumption_kwh == pytest.approx(12.5, abs=0.01)
+    assert coordinator.data.telemetry.smart_load_today_kwh == pytest.approx(2.5, abs=0.01)
+
+
+async def test_no_stats_no_history_source_is_none(
+    hass: HomeAssistant, setup_integration
+) -> None:
+    """When both statistics and power history are empty, source should be NONE."""
+
+    coordinator: SmartEnergyCoordinator = hass.data[DOMAIN][setup_integration.entry_id]
+    coordinator._telemetry_history.clear()
+    coordinator._consumption_forecaster.async_estimate = AsyncMock(
+        return_value=(None, 0.0)
+    )
+
+    hass.states.async_set("sensor.home_consumption", "unavailable")
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    forecast = coordinator.data.forecast
+    assert forecast.consumption_tomorrow_kwh is None
+    assert forecast.consumption_source == ConsumptionSource.NONE

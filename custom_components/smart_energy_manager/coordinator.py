@@ -33,8 +33,11 @@ from .const import (
     CONF_PV_GENERATION_TODAY_ENTITY,
     CONF_PV_POWER_ENTITY,
     CONF_SCAN_INTERVAL_SECONDS,
+    CONF_SMART_LOAD_TODAY_ENTITY,
     CONF_TARGET_SOC_OVERRIDE,
     CONF_TARIFF_TYPE,
+    CONF_TODAY_LOAD_CONSUMPTION_ENTITY,
+    ConsumptionSource,
     DEFAULT_BATTERY_TEMPERATURE_C,
     DEFAULT_MIN_SOC,
     DEFAULT_SCAN_INTERVAL,
@@ -44,6 +47,7 @@ from .const import (
     EnergyMode,
     TariffType,
 )
+from .consumption_forecast import ConsumptionForecaster
 from .models import BatteryConfig, EnergyState, ForecastSnapshot, Recommendation, TariffConfig, TelemetrySnapshot
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,6 +93,7 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             self.update_interval = DEFAULT_SCAN_INTERVAL.__class__(seconds=scan_interval_seconds)
 
         self._telemetry_history: deque[TelemetrySnapshot] = deque(maxlen=24 * 60)
+        self._consumption_forecaster = ConsumptionForecaster(hass)
 
     async def _async_update_data(self) -> EnergyState:
         """Fetch states from Home Assistant and build a normalized payload."""
@@ -103,6 +108,8 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             grid_import_kwh=_float_state(self.hass, self._get_value(CONF_GRID_IMPORT_ENTITY)),
             grid_export_kwh=_float_state(self.hass, self._get_value(CONF_GRID_EXPORT_ENTITY)),
             home_consumption_kw=_float_state(self.hass, self._get_value(CONF_HOME_CONSUMPTION_ENTITY)),
+            today_load_consumption_kwh=_float_state(self.hass, self._get_value(CONF_TODAY_LOAD_CONSUMPTION_ENTITY)),
+            smart_load_today_kwh=_float_state(self.hass, self._get_value(CONF_SMART_LOAD_TODAY_ENTITY)),
             updated_at=datetime.now(UTC),
         )
 
@@ -111,7 +118,39 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
 
         self._telemetry_history.append(telemetry)
 
-        consumption_today, consumption_tomorrow, consumption_confidence = self._estimate_consumption_forecast()
+        # --- Consumption forecast: priority chain ---
+        # 1) Statistics-based baseline (recorder, survives restarts)
+        stats_tomorrow, stats_confidence = await self._consumption_forecaster.async_estimate(
+            self._get_value(CONF_TODAY_LOAD_CONSUMPTION_ENTITY),
+            self._get_value(CONF_SMART_LOAD_TODAY_ENTITY),
+        )
+
+        # 2) Power-history-based fallback
+        pw_today, pw_tomorrow, pw_confidence = self._estimate_consumption_forecast()
+
+        # Live baseline for today (ground truth when energy counters are configured)
+        if telemetry.today_load_consumption_kwh is not None:
+            smart = telemetry.smart_load_today_kwh or 0.0
+            live_baseline_today = max(telemetry.today_load_consumption_kwh - smart, 0.0)
+        else:
+            live_baseline_today = None
+
+        # Resolve tomorrow forecast and source
+        if stats_tomorrow is not None:
+            consumption_tomorrow = stats_tomorrow
+            consumption_confidence = stats_confidence
+            consumption_source = ConsumptionSource.STATISTICS
+        elif pw_tomorrow is not None:
+            consumption_tomorrow = pw_tomorrow
+            consumption_confidence = pw_confidence
+            consumption_source = ConsumptionSource.POWER_HISTORY
+        else:
+            consumption_tomorrow = None
+            consumption_confidence = None
+            consumption_source = ConsumptionSource.NONE
+
+        # Resolve today consumption: live baseline beats power-based estimate
+        consumption_today = live_baseline_today if live_baseline_today is not None else pw_today
 
         forecast = ForecastSnapshot(
             today_kwh=_float_state(self.hass, self._get_value(CONF_FORECAST_TODAY_ENTITY)),
@@ -120,6 +159,7 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             consumption_today_kwh=consumption_today,
             consumption_tomorrow_kwh=consumption_tomorrow,
             consumption_confidence=consumption_confidence,
+            consumption_source=consumption_source,
         )
         forecast = replace(
             forecast,
@@ -141,6 +181,7 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
         """Clear in-memory history."""
 
         self._telemetry_history.clear()
+        self._consumption_forecaster.invalidate_cache()
         await self.async_request_refresh()
 
     def _get_value(self, key: str) -> Any:

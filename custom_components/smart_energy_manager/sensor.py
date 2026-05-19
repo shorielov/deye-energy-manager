@@ -14,12 +14,15 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     ATTR_ACTIVE_MODE,
     ATTR_CONSUMPTION_CONFIDENCE,
+    ATTR_CONSUMPTION_SOURCE,
     ATTR_CONSUMPTION_TODAY_KWH,
     ATTR_CONSUMPTION_TOMORROW_KWH,
     ATTR_ESTIMATED_SAVINGS,
     ATTR_EXPECTED_BALANCE,
     ATTR_FORECAST_CONFIDENCE,
     ATTR_REASON_CODES,
+    ATTR_SMART_LOAD_TODAY_KWH,
+    ATTR_TODAY_LOAD_KWH,
     DOMAIN,
 )
 from .coordinator import SmartEnergyCoordinator
@@ -115,6 +118,7 @@ class SmartEnergySensor(SmartEnergyEntity, SensorEntity):
 
         recommendation = self.coordinator.data.recommendation
         forecast = self.coordinator.data.forecast
+        telemetry = self.coordinator.data.telemetry
         return {
             ATTR_ESTIMATED_SAVINGS: recommendation.estimated_savings,
             ATTR_REASON_CODES: [code.value for code in recommendation.reason_codes],
@@ -124,6 +128,9 @@ class SmartEnergySensor(SmartEnergyEntity, SensorEntity):
             ATTR_CONSUMPTION_TODAY_KWH: forecast.consumption_today_kwh,
             ATTR_CONSUMPTION_TOMORROW_KWH: forecast.consumption_tomorrow_kwh,
             ATTR_CONSUMPTION_CONFIDENCE: forecast.consumption_confidence,
+            ATTR_CONSUMPTION_SOURCE: forecast.consumption_source.value,
+            ATTR_TODAY_LOAD_KWH: telemetry.today_load_consumption_kwh,
+            ATTR_SMART_LOAD_TODAY_KWH: telemetry.smart_load_today_kwh,
         }
 
 

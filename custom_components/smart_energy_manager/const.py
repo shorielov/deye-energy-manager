@@ -20,6 +20,8 @@ CONF_GRID_IMPORT_ENTITY = "grid_import_entity"
 CONF_GRID_EXPORT_ENTITY = "grid_export_entity"
 
 CONF_HOME_CONSUMPTION_ENTITY = "home_consumption_entity"
+CONF_TODAY_LOAD_CONSUMPTION_ENTITY = "today_load_consumption_entity"
+CONF_SMART_LOAD_TODAY_ENTITY = "smart_load_today_entity"
 
 CONF_FORECAST_TODAY_ENTITY = "forecast_today_entity"
 CONF_FORECAST_TOMORROW_ENTITY = "forecast_tomorrow_entity"
@@ -54,6 +56,9 @@ ATTR_ACTIVE_MODE = "active_mode"
 ATTR_CONSUMPTION_TODAY_KWH = "consumption_today_kwh"
 ATTR_CONSUMPTION_TOMORROW_KWH = "consumption_tomorrow_kwh"
 ATTR_CONSUMPTION_CONFIDENCE = "consumption_confidence"
+ATTR_CONSUMPTION_SOURCE = "consumption_source"
+ATTR_TODAY_LOAD_KWH = "today_load_kwh"
+ATTR_SMART_LOAD_TODAY_KWH = "smart_load_today_kwh"
 
 SERVICE_RECOMPUTE = "recompute"
 SERVICE_CLEAR_HISTORY = "clear_history"
@@ -75,6 +80,15 @@ class TariffType(StrEnum):
 
     FLAT = "flat"
     DUAL = "dual"
+
+
+class ConsumptionSource(StrEnum):
+    """Which data path produced the consumption forecast."""
+
+    STATISTICS = "statistics"
+    POWER_HISTORY = "power_history"
+    FALLBACK = "fallback"
+    NONE = "none"
 
 
 class RecommendationCode(StrEnum):

@@ -27,7 +27,9 @@ from custom_components.smart_energy_manager.const import (
     CONF_MODE,
     CONF_PV_GENERATION_TODAY_ENTITY,
     CONF_PV_POWER_ENTITY,
+    CONF_SMART_LOAD_TODAY_ENTITY,
     CONF_TARIFF_TYPE,
+    CONF_TODAY_LOAD_CONSUMPTION_ENTITY,
     DOMAIN,
     EnergyMode,
     TariffType,
@@ -83,6 +85,8 @@ def mock_config_entry() -> MockConfigEntry:
             CONF_GRID_IMPORT_ENTITY: "sensor.grid_import",
             CONF_GRID_EXPORT_ENTITY: "sensor.grid_export",
             CONF_HOME_CONSUMPTION_ENTITY: "sensor.home_consumption",
+            CONF_TODAY_LOAD_CONSUMPTION_ENTITY: "sensor.today_load_consumption",
+            CONF_SMART_LOAD_TODAY_ENTITY: "sensor.smart_load_today",
             CONF_FORECAST_TODAY_ENTITY: "sensor.forecast_today",
             CONF_FORECAST_TOMORROW_ENTITY: "sensor.forecast_tomorrow",
             CONF_FORECAST_REMAINING_ENTITY: "sensor.forecast_remaining",
@@ -106,6 +110,8 @@ async def setup_integration(hass: HomeAssistant, mock_config_entry: MockConfigEn
     hass.states.async_set("sensor.grid_import", 6.2)
     hass.states.async_set("sensor.grid_export", 1.1)
     hass.states.async_set("sensor.home_consumption", 0.75)
+    hass.states.async_set("sensor.today_load_consumption", 12.5)
+    hass.states.async_set("sensor.smart_load_today", 2.5)
     hass.states.async_set("sensor.forecast_today", 7.5)
     hass.states.async_set("sensor.forecast_tomorrow", 4.0)
     hass.states.async_set("sensor.forecast_remaining", 2.5)

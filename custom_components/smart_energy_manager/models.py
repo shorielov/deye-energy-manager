@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, time
 
-from .const import EnergyMode, RecommendationCode, TariffType
+from .const import ConsumptionSource, EnergyMode, RecommendationCode, TariffType
 
 
 @dataclass(slots=True)
@@ -41,6 +41,8 @@ class TelemetrySnapshot:
     grid_import_kwh: float | None = None
     grid_export_kwh: float | None = None
     home_consumption_kw: float | None = None
+    today_load_consumption_kwh: float | None = None
+    smart_load_today_kwh: float | None = None
     updated_at: datetime | None = None
 
 
@@ -56,6 +58,7 @@ class ForecastSnapshot:
     consumption_today_kwh: float | None = None
     consumption_tomorrow_kwh: float | None = None
     consumption_confidence: float | None = None
+    consumption_source: ConsumptionSource = ConsumptionSource.NONE
 
 
 @dataclass(slots=True)
