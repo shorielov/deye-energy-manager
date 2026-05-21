@@ -37,6 +37,7 @@ from .const import (
     CONF_PV_POWER_ENTITY,
     CONF_SCAN_INTERVAL_SECONDS,
     CONF_SMART_LOAD_TODAY_ENTITY,
+    CONF_SOLARMAN_DEVICE_NAME,
     CONF_SUNSYNK_ENTITY_PREFIX,
     CONF_TARGET_SOC_OVERRIDE,
     CONF_TARIFF_TYPE,
@@ -349,7 +350,8 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
 
         adapter_type = self._get_value(CONF_INVERTER_ADAPTER) or InverterAdapterType.NONE
         prefix = self._get_value(CONF_SUNSYNK_ENTITY_PREFIX) or ""
-        adapter = get_adapter(str(adapter_type), str(prefix))
+        device_name = self._get_value(CONF_SOLARMAN_DEVICE_NAME) or "inverter"
+        adapter = get_adapter(str(adapter_type), entity_prefix=str(prefix), device_name=str(device_name))
 
         try:
             await adapter.async_apply_plan(self.hass, plan)

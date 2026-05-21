@@ -34,7 +34,8 @@
     "inverter_adapter": {
       "options": {
         "none": "None (manual automations)",
-        "sunsynk": "Sunsynk / Deye (kellerza)"
+        "sunsynk": "Sunsynk / Deye (kellerza)",
+        "solarman": "Solarman / Deye (davidrapan)"
       }
     }
   },

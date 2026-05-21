@@ -41,6 +41,7 @@ CONF_TARGET_SOC_OVERRIDE = "target_soc_override"
 CONF_SCAN_INTERVAL_SECONDS = "scan_interval_seconds"
 CONF_INVERTER_ADAPTER = "inverter_adapter"
 CONF_SUNSYNK_ENTITY_PREFIX = "sunsynk_entity_prefix"
+CONF_SOLARMAN_DEVICE_NAME = "solarman_device_name"
 
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=60)
 DEFAULT_MIN_SOC = 20
@@ -98,6 +99,7 @@ class InverterAdapterType(StrEnum):
 
     NONE = "none"
     SUNSYNK = "sunsynk"
+    SOLARMAN = "solarman"
 
 
 class RecommendationCode(StrEnum):

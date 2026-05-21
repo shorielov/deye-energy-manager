@@ -78,3 +78,53 @@ async def test_plan_hash_prevents_duplicate_apply():
     await apply_if_changed(plan)  # same plan, should not call again
 
     assert hass.services.async_call.call_count == 18  # called once, not twice
+
+
+@pytest.mark.asyncio
+async def test_solarman_adapter_apply_plan_writes():
+    """get_adapter('solarman') → SolarmanAdapter: async_apply_plan calls select.select_option."""
+    from custom_components.smart_energy_manager.adapters import get_adapter
+
+    hass = MagicMock()
+    hass.services = MagicMock()
+    hass.services.async_call = AsyncMock()
+
+    adapter = get_adapter("solarman", device_name="inverter")
+    await adapter.async_apply_plan(hass, _plan())
+    # 6 slots × 3 service calls
+    assert hass.services.async_call.call_count == 18
+
+
+@pytest.mark.asyncio
+async def test_solarman_adapter_uses_select_not_switch():
+    """Solarman adapter must use select.select_option, not switch.turn_on/off."""
+    from custom_components.smart_energy_manager.adapters import get_adapter
+
+    hass = MagicMock()
+    hass.services = MagicMock()
+    hass.services.async_call = AsyncMock()
+
+    adapter = get_adapter("solarman")
+    await adapter.async_apply_plan(hass, _plan())
+
+    calls = hass.services.async_call.call_args_list
+    domains = [c.args[0] for c in calls]
+    assert "switch" not in domains
+    assert "select" in domains
+
+
+@pytest.mark.asyncio
+async def test_solarman_adapter_custom_device_name():
+    """get_adapter('solarman', device_name='myinv') should use myinv slug in entity_ids."""
+    from custom_components.smart_energy_manager.adapters import get_adapter
+
+    hass = MagicMock()
+    hass.services = MagicMock()
+    hass.services.async_call = AsyncMock()
+
+    adapter = get_adapter("solarman", device_name="myinv")
+    await adapter.async_apply_plan(hass, _plan())
+
+    calls = hass.services.async_call.call_args_list
+    time_calls = [c for c in calls if c.args[0] == "time"]
+    assert time_calls[0].args[2]["entity_id"] == "time.myinv_program_1_time"

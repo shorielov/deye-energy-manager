@@ -33,6 +33,7 @@ from .const import (
     CONF_PV_POWER_ENTITY,
     CONF_SCAN_INTERVAL_SECONDS,
     CONF_SMART_LOAD_TODAY_ENTITY,
+    CONF_SOLARMAN_DEVICE_NAME,
     CONF_SUNSYNK_ENTITY_PREFIX,
     CONF_TARGET_SOC_OVERRIDE,
     CONF_TARIFF_TYPE,
@@ -146,6 +147,10 @@ def _build_schema(user_input: Mapping[str, Any] | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_SUNSYNK_ENTITY_PREFIX,
                 description={"suggested_value": user_input.get(CONF_SUNSYNK_ENTITY_PREFIX, "")},
+            ): selector({"text": {}}),
+            vol.Optional(
+                CONF_SOLARMAN_DEVICE_NAME,
+                description={"suggested_value": user_input.get(CONF_SOLARMAN_DEVICE_NAME, "inverter")},
             ): selector({"text": {}}),
             vol.Required(
                 CONF_SCAN_INTERVAL_SECONDS,

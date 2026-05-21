@@ -29,6 +29,7 @@
           "auto_apply_recommendations": "Auto apply recommendations",
           "inverter_adapter": "Inverter adapter",
           "sunsynk_entity_prefix": "Sunsynk entity prefix (optional)",
+          "solarman_device_name": "Solarman device name (default: inverter)",
           "scan_interval_seconds": "Refresh interval (seconds)"
         }
       }
@@ -64,6 +65,7 @@
           "auto_apply_recommendations": "Auto apply recommendations",
           "inverter_adapter": "Inverter adapter",
           "sunsynk_entity_prefix": "Sunsynk entity prefix (optional)",
+          "solarman_device_name": "Solarman device name (default: inverter)",
           "scan_interval_seconds": "Refresh interval (seconds)"
         }
       }
@@ -88,7 +90,8 @@
     "inverter_adapter": {
       "options": {
         "none": "None (manual automations)",
-        "sunsynk": "Sunsynk / Deye (kellerza)"
+        "sunsynk": "Sunsynk / Deye (kellerza)",
+        "solarman": "Solarman / Deye (davidrapan)"
       }
     }
   },
