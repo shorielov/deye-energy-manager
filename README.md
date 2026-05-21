@@ -168,6 +168,282 @@ If your Solarman config entry uses a different device name (e.g. `deye_sg04`), s
 
 ---
 
+## Dashboard (Lovelace)
+
+A ready-to-use dashboard built entirely from entities published by this integration.  
+No extra helpers, template sensors, or automations required.
+
+### Prerequisites
+
+Install via **HACS → Frontend**:
+
+| Card | Repository | Notes |
+|---|---|---|
+| **Mushroom** | `piitaya/lovelace-mushroom` | required |
+| **vertical-stack-in-card** | `ofekashery/vertical-stack-in-card` | required |
+| **Power Flow Card Plus** | `flixlix/power-flow-card-plus` | required |
+| **ApexCharts Card** | `RomRider/apexcharts-card` | required (History view) |
+
+After installing all cards, restart Home Assistant and hard-refresh your browser (`Ctrl+F5`).
+
+### Add the dashboard
+
+1. **Settings → Dashboards → Add dashboard → New dashboard from scratch**, name it *Smart Energy*.
+2. Open the dashboard → **⋮ → Edit dashboard → ⋮ → Raw configuration editor**.
+3. Paste the YAML below, replace every `sensor.deye_*` placeholder with your actual entity IDs (the same ones you entered during integration setup), then **Save**.
+
+---
+
+### Dashboard YAML
+
+```yaml
+title: Smart Energy
+views:
+
+  # ════════════════════════════════════════════════════════════
+  # VIEW 1 — Overview
+  # ════════════════════════════════════════════════════════════
+  - title: Overview
+    path: overview
+    icon: mdi:solar-power
+    cards:
+
+      # ── Power flow animation ──────────────────────────────
+      - type: custom:power-flow-card-plus
+        title: Live power flow
+        entities:
+          battery:
+            entity: sensor.deye_battery_soc        # ← your battery SoC sensor
+            state_of_charge: sensor.deye_battery_soc
+            power_entity: sensor.deye_battery_power  # ← your battery power sensor (W, + = charge, - = discharge)
+          solar:
+            entity: sensor.deye_pv_power            # ← your PV power sensor (W)
+          grid:
+            entity: sensor.deye_grid_import_power   # ← your grid import power sensor (W)
+          home:
+            entity: sensor.deye_load_power          # ← your home consumption sensor (W)
+        display_zero_lines: true
+        use_new_flow_rate_model: true
+        watt_threshold: 1000
+
+      # ── Status chips + Plan card (combined via vertical-stack) ───
+      - type: custom:vertical-stack-in-card
+        title: Today's plan
+        cards:
+
+          # chips row
+          - type: custom:mushroom-chips-card
+            alignment: center
+            chips:
+              - type: entity
+                entity: sensor.smart_energy_manager_plan
+                icon: mdi:lightning-bolt-circle
+                content_info: state
+                tap_action:
+                  action: more-info
+              - type: entity
+                entity: sensor.smart_energy_manager_energy_score
+                icon: mdi:leaf
+              - type: entity
+                entity: sensor.smart_energy_manager_grid_dependency
+                icon: mdi:transmission-tower
+              - type: entity
+                entity: binary_sensor.smart_energy_manager_bad_weather
+                icon: mdi:weather-cloudy-alert
+              - type: entity
+                entity: binary_sensor.smart_energy_manager_energy_deficit
+                icon: mdi:battery-alert
+
+          # plan summary tile
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.smart_energy_manager_plan') }} strategy
+            secondary: >-
+              Est. savings: {{ state_attr('sensor.smart_energy_manager_plan',
+              'estimated_savings_uah') | round(2) }} UAH ·
+              Balance: {{ state_attr('sensor.smart_energy_manager_plan',
+              'expected_balance_kwh') | round(2) }} kWh
+            icon: mdi:chart-timeline-variant
+            icon_color: blue
+            tap_action:
+              action: more-info
+              entity: sensor.smart_energy_manager_plan
+
+          # 6 TOU slots
+          - type: grid
+            columns: 3
+            square: false
+            cards:
+              - type: custom:mushroom-template-card
+                primary: "Slot 1 · {{ states('sensor.smart_energy_manager_plan_slot_1_start') }}"
+                secondary: >-
+                  {{ states('sensor.smart_energy_manager_plan_slot_1_target_soc') }}%
+                  · {{ 'Grid charge' if is_state('binary_sensor.smart_energy_manager_plan_slot_1_charge', 'on') else 'PV / idle' }}
+                icon: >-
+                  {{ 'mdi:transmission-tower-import' if is_state('binary_sensor.smart_energy_manager_plan_slot_1_charge', 'on') else 'mdi:solar-power' }}
+                icon_color: >-
+                  {{ 'red' if is_state('binary_sensor.smart_energy_manager_plan_slot_1_charge', 'on') else 'green' }}
+              - type: custom:mushroom-template-card
+                primary: "Slot 2 · {{ states('sensor.smart_energy_manager_plan_slot_2_start') }}"
+                secondary: >-
+                  {{ states('sensor.smart_energy_manager_plan_slot_2_target_soc') }}%
+                  · {{ 'Grid charge' if is_state('binary_sensor.smart_energy_manager_plan_slot_2_charge', 'on') else 'PV / idle' }}
+                icon: >-
+                  {{ 'mdi:transmission-tower-import' if is_state('binary_sensor.smart_energy_manager_plan_slot_2_charge', 'on') else 'mdi:solar-power' }}
+                icon_color: >-
+                  {{ 'red' if is_state('binary_sensor.smart_energy_manager_plan_slot_2_charge', 'on') else 'green' }}
+              - type: custom:mushroom-template-card
+                primary: "Slot 3 · {{ states('sensor.smart_energy_manager_plan_slot_3_start') }}"
+                secondary: >-
+                  {{ states('sensor.smart_energy_manager_plan_slot_3_target_soc') }}%
+                  · {{ 'Grid charge' if is_state('binary_sensor.smart_energy_manager_plan_slot_3_charge', 'on') else 'PV / idle' }}
+                icon: >-
+                  {{ 'mdi:transmission-tower-import' if is_state('binary_sensor.smart_energy_manager_plan_slot_3_charge', 'on') else 'mdi:solar-power' }}
+                icon_color: >-
+                  {{ 'red' if is_state('binary_sensor.smart_energy_manager_plan_slot_3_charge', 'on') else 'green' }}
+              - type: custom:mushroom-template-card
+                primary: "Slot 4 · {{ states('sensor.smart_energy_manager_plan_slot_4_start') }}"
+                secondary: >-
+                  {{ states('sensor.smart_energy_manager_plan_slot_4_target_soc') }}%
+                  · {{ 'Grid charge' if is_state('binary_sensor.smart_energy_manager_plan_slot_4_charge', 'on') else 'PV / idle' }}
+                icon: >-
+                  {{ 'mdi:transmission-tower-import' if is_state('binary_sensor.smart_energy_manager_plan_slot_4_charge', 'on') else 'mdi:solar-power' }}
+                icon_color: >-
+                  {{ 'red' if is_state('binary_sensor.smart_energy_manager_plan_slot_4_charge', 'on') else 'green' }}
+              - type: custom:mushroom-template-card
+                primary: "Slot 5 · {{ states('sensor.smart_energy_manager_plan_slot_5_start') }}"
+                secondary: >-
+                  {{ states('sensor.smart_energy_manager_plan_slot_5_target_soc') }}%
+                  · {{ 'Grid charge' if is_state('binary_sensor.smart_energy_manager_plan_slot_5_charge', 'on') else 'PV / idle' }}
+                icon: >-
+                  {{ 'mdi:transmission-tower-import' if is_state('binary_sensor.smart_energy_manager_plan_slot_5_charge', 'on') else 'mdi:solar-power' }}
+                icon_color: >-
+                  {{ 'red' if is_state('binary_sensor.smart_energy_manager_plan_slot_5_charge', 'on') else 'green' }}
+              - type: custom:mushroom-template-card
+                primary: "Slot 6 · {{ states('sensor.smart_energy_manager_plan_slot_6_start') }}"
+                secondary: >-
+                  {{ states('sensor.smart_energy_manager_plan_slot_6_target_soc') }}%
+                  · {{ 'Grid charge' if is_state('binary_sensor.smart_energy_manager_plan_slot_6_charge', 'on') else 'PV / idle' }}
+                icon: >-
+                  {{ 'mdi:transmission-tower-import' if is_state('binary_sensor.smart_energy_manager_plan_slot_6_charge', 'on') else 'mdi:solar-power' }}
+                icon_color: >-
+                  {{ 'red' if is_state('binary_sensor.smart_energy_manager_plan_slot_6_charge', 'on') else 'green' }}
+
+      # ── Controls ─────────────────────────────────────────
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: switch.smart_energy_manager_eco_mode
+            name: Eco
+            icon: mdi:leaf
+            tap_action:
+              action: toggle
+          - type: custom:mushroom-entity-card
+            entity: switch.smart_energy_manager_winter_mode
+            name: Winter
+            icon: mdi:snowflake
+            tap_action:
+              action: toggle
+          - type: custom:mushroom-entity-card
+            entity: switch.smart_energy_manager_auto_apply_recommendations
+            name: Auto-apply
+            icon: mdi:upload-network
+            tap_action:
+              action: toggle
+          - type: custom:mushroom-number-card
+            entity: number.smart_energy_manager_min_soc_override
+            name: Min SoC
+            icon: mdi:battery-low
+          - type: custom:mushroom-number-card
+            entity: number.smart_energy_manager_target_soc_override
+            name: Target SoC
+            icon: mdi:target
+
+  # ════════════════════════════════════════════════════════════
+  # VIEW 2 — History (7-day trends)
+  # ════════════════════════════════════════════════════════════
+  - title: History
+    path: history
+    icon: mdi:chart-line
+    cards:
+
+      - type: custom:apexcharts-card
+        header:
+          show: true
+          title: Forecast Balance — last 7 days (kWh)
+        graph_span: 7d
+        span:
+          end: now
+        series:
+          - entity: sensor.smart_energy_manager_forecast_balance
+            name: Forecast balance
+            type: area
+            color: "#00b0ff"
+            fill_raw: "null"
+            stroke_width: 2
+            show:
+              legend_value: true
+
+      - type: custom:apexcharts-card
+        header:
+          show: true
+          title: Energy Score & Grid Dependency — last 7 days (%)
+        graph_span: 7d
+        span:
+          end: now
+        apex_config:
+          yaxis:
+            min: 0
+            max: 100
+        series:
+          - entity: sensor.smart_energy_manager_energy_score
+            name: Energy Score
+            type: line
+            color: "#43a047"
+            stroke_width: 2
+            show:
+              legend_value: true
+          - entity: sensor.smart_energy_manager_grid_dependency
+            name: Grid Dependency
+            type: line
+            color: "#e53935"
+            stroke_width: 2
+            show:
+              legend_value: true
+
+      - type: custom:apexcharts-card
+        header:
+          show: true
+          title: Bad Weather Risk — last 7 days (%)
+        graph_span: 7d
+        span:
+          end: now
+        apex_config:
+          yaxis:
+            min: 0
+            max: 100
+        series:
+          - entity: sensor.smart_energy_manager_bad_weather_risk
+            name: Bad weather risk
+            type: area
+            color: "#ff8f00"
+            stroke_width: 2
+            show:
+              legend_value: true
+```
+
+### Notes
+
+- Replace all `sensor.deye_*` entities with the entity IDs you entered during integration setup.
+- **Power Flow Card Plus**: `battery_power` sign convention — positive = charging, negative = discharging. Check your inverter sensor and add `invert_state: true` under `battery:` if the signs are reversed.
+- **Slot tiles**: colour coding — red = grid-charge slot, green = PV / idle slot. Tiles show `unknown` until the first plan is generated after HA restart.
+- **History view**: sensors must have `state_class: measurement` recorded by the HA Recorder. `forecast_balance`, `energy_score`, `grid_dependency`, and `bad_weather_risk` all qualify. History depth depends on your Recorder `purge_keep_days` setting (default 10 days).
+- The integration recomputes the plan periodically; all tiles and charts refresh automatically.
+
+---
+
 ## Architecture
 
 ```
