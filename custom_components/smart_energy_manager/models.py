@@ -81,6 +81,11 @@ class ForecastSnapshot:
     consumption_tomorrow_kwh: float | None = None
     consumption_confidence: float | None = None
     consumption_source: ConsumptionSource = ConsumptionSource.NONE
+    peak_today_w: float | None = None
+    peak_tomorrow_w: float | None = None
+    peak_reference_w: float | None = None
+    baseline_kwh: float | None = None
+    baseline_samples: int = 0
 
 
 @dataclass(slots=True)

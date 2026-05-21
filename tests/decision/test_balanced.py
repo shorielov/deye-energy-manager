@@ -32,6 +32,9 @@ def _ctx(
     now: datetime = datetime(2024, 1, 15, 10, 0),
     sun: SunTimes | None = SunTimes(time(7, 30), time(17, 30)),
     consumption_tomorrow: float | None = 12.0,
+    peak_today_w: float | None = None,
+    peak_tomorrow_w: float | None = None,
+    peak_reference_w: float | None = None,
 ) -> DecisionContext:
     tariff = TariffConfig(
         tariff_type=tariff_type,
@@ -48,6 +51,9 @@ def _ctx(
             remaining_today_kwh=remaining_today,
             confidence=0.8,
             consumption_tomorrow_kwh=consumption_tomorrow,
+            peak_today_w=peak_today_w,
+            peak_tomorrow_w=peak_tomorrow_w,
+            peak_reference_w=peak_reference_w,
         ),
         tariff=tariff,
         battery=BatteryConfig(capacity_kwh=capacity_kwh),
@@ -127,3 +133,40 @@ class TestBalancedSlotContents:
         plan = strategy.evaluate(_ctx())
         for slot in plan.slots:
             assert isinstance(slot.reason, RecommendationCode)
+
+
+class TestBalancedWeatherRisk:
+    def test_grid_charge_triggered_by_bad_weather(self):
+        """tomorrow=15 kWh PV, consumption=16 → raw_deficit=1 (normally < 2.0 threshold),
+        but peak_tomorrow=2000 vs ref=4000 → risk≈0.80, adj_pv is derated ≈7.8 kWh,
+        adj_deficit≈8.2 > threshold 1.0 → should trigger grid charge.
+        """
+        plan = strategy.evaluate(
+            _ctx(
+                tariff_type=TariffType.DUAL,
+                tomorrow_kwh=15.0,
+                consumption_tomorrow=16.0,
+                battery_soc=50.0,
+                capacity_kwh=10.0,
+                peak_today_w=4000.0,
+                peak_tomorrow_w=2000.0,
+                peak_reference_w=4000.0,
+            )
+        )
+        assert any(s.charge_from_grid for s in plan.slots)
+
+    def test_no_grid_charge_when_sunny_and_small_deficit(self):
+        """tomorrow=14 kWh PV, consumption=15 → raw_deficit=1, clear sky → adj_pv≈14 kWh,
+        adj_deficit≈1 < 2.0 threshold → no grid charge.
+        """
+        plan = strategy.evaluate(
+            _ctx(
+                tariff_type=TariffType.DUAL,
+                tomorrow_kwh=14.0,
+                consumption_tomorrow=15.0,
+                peak_today_w=4000.0,
+                peak_tomorrow_w=4000.0,
+                peak_reference_w=4000.0,
+            )
+        )
+        assert all(not s.charge_from_grid for s in plan.slots)

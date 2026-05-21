@@ -7,7 +7,7 @@ from datetime import datetime, time
 from ..base import Strategy
 from ..context import DecisionContext
 from ..plan import collapse_to_six, estimate_savings_uah
-from ..signals import expected_deficit_kwh, headroom_battery_kwh
+from ..signals import expected_deficit_kwh, headroom_battery_kwh, risk_adjusted_pv_kwh, weather_risk
 from ...const import RecommendationCode, TariffType
 from ...models import Plan, PlanSlot
 
@@ -38,15 +38,27 @@ class BalancedStrategy(Strategy):
         sunrise_plus1 = time(min(sunrise.hour + 1, 23), sunrise.minute)
         sunset_minus1 = time(max(sunset.hour - 1, 0), sunset.minute)
 
-        deficit = expected_deficit_kwh(ctx.forecast)
+        raw_deficit = expected_deficit_kwh(ctx.forecast)
         headroom = headroom_battery_kwh(ctx.telemetry, ctx.battery, ctx.target_soc)
+        risk = weather_risk(ctx.forecast)
+        adj_pv = risk_adjusted_pv_kwh(ctx.forecast)
+
+        # Risk-adjusted deficit: use adj_pv if available, else raw tomorrow_kwh
+        adj_deficit: float | None = None
+        if ctx.forecast.consumption_tomorrow_kwh is not None:
+            pv_for_deficit = adj_pv if adj_pv is not None else ctx.forecast.tomorrow_kwh
+            if pv_for_deficit is not None:
+                adj_deficit = round(ctx.forecast.consumption_tomorrow_kwh - pv_for_deficit, 3)
+
+        # Lower grid-charge threshold when weather risk is high
+        grid_charge_threshold = 1.0 if risk > 0.5 else 2.0
 
         use_grid = (
             ctx.tariff.tariff_type == TariffType.DUAL
             and ctx.tariff.night_start is not None
             and ctx.tariff.night_end is not None
-            and deficit is not None
-            and deficit > 2.0
+            and adj_deficit is not None
+            and adj_deficit > grid_charge_threshold
             and headroom > 2.0
         )
 
@@ -55,10 +67,10 @@ class BalancedStrategy(Strategy):
         if not use_grid:
             if ctx.tariff.tariff_type == TariffType.FLAT:
                 notes.append("Flat tariff: no grid charging scheduled")
-            elif deficit is None:
+            elif adj_deficit is None:
                 notes.append("Forecast data missing; defaulting to PV-only mode")
-            elif deficit <= 2.0:
-                notes.append(f"Deficit {deficit:.1f} kWh too small; skipping grid charge")
+            elif adj_deficit <= grid_charge_threshold:
+                notes.append(f"Deficit {adj_deficit:.1f} kWh too small; skipping grid charge")
             else:
                 notes.append(f"Battery headroom {headroom:.1f} kWh too low; skipping grid charge")
 
@@ -109,12 +121,17 @@ class BalancedStrategy(Strategy):
 
         unique = collapse_to_six(unique)
 
+        if adj_pv is not None and ctx.forecast.tomorrow_kwh is not None and abs(adj_pv - ctx.forecast.tomorrow_kwh) > 1.0:
+            notes.append(
+                f"Risk-adjusted PV: {adj_pv:.1f} kWh (risk={risk:.0%}, raw={ctx.forecast.tomorrow_kwh:.1f} kWh)"
+            )
+
         plan = Plan(
             slots=unique,
             generated_at=now,
             strategy=self.name,
-            expected_balance_kwh=-deficit if deficit is not None else None,
+            expected_balance_kwh=-raw_deficit if raw_deficit is not None else None,
             notes=notes,
         )
-        plan.estimated_savings_uah = estimate_savings_uah(plan, ctx.tariff, deficit)
+        plan.estimated_savings_uah = estimate_savings_uah(plan, ctx.tariff, raw_deficit)
         return plan

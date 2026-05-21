@@ -116,11 +116,58 @@ def headroom_battery_kwh(
 
 
 def weather_risk(forecast: ForecastSnapshot) -> float:
-    """0–1 risk score where 1 = very risky / uncertain."""
-    base = 1.0 - (forecast.confidence or 0.5)
+    """0–1 risk score where 1 = very risky / uncertain.
+
+    Path A (primary): peak_tomorrow_w / peak_reference_w clearness ratio.
+    Path B (fallback): tomorrow_kwh vs baseline_kwh ratio.
+    Path C (cold-start): data completeness only — unreliable for first ~2 weeks.
+    """
+    risk: float
+
+    if forecast.peak_tomorrow_w is not None and forecast.peak_reference_w is not None:
+        # Path A — peak-based clearness ratio
+        clearness = min(forecast.peak_tomorrow_w / forecast.peak_reference_w, 1.2)
+        risk = min((1.0 - clearness) * 1.3, 1.0)
+        risk = max(risk, 0.0)
+        if forecast.peak_today_w is not None and forecast.peak_today_w > 0:
+            drop = max(0.0, 1.0 - forecast.peak_tomorrow_w / forecast.peak_today_w)
+            risk = min(1.0, risk + drop * 0.3)
+    elif (
+        forecast.baseline_kwh is not None
+        and forecast.tomorrow_kwh is not None
+        and forecast.baseline_kwh > 0
+    ):
+        # Path B — daily kWh ratio fallback
+        risk = min(
+            max((1.0 - forecast.tomorrow_kwh / forecast.baseline_kwh) * 1.4, 0.0),
+            1.0,
+        )
+        if forecast.baseline_samples < 5:
+            risk = min(1.0, risk + 0.1)
+    else:
+        # Path C — cold-start: data completeness only
+        risk = 1.0 - (forecast.confidence or 0.5)
+
     if forecast.degrading:
-        base = min(base + 0.2, 1.0)
-    return round(base, 2)
+        risk = min(1.0, risk + 0.15)
+
+    return round(risk, 2)
+
+
+def risk_adjusted_pv_kwh(forecast: ForecastSnapshot) -> float | None:
+    """Return tomorrow PV estimate derated by weather risk.
+
+    Uses a stronger derate factor when the risk signal is peak-based
+    (more reliable) vs completeness-based (weaker signal).
+    Returns ``None`` when tomorrow_kwh is unavailable.
+    """
+    if forecast.tomorrow_kwh is None:
+        return None
+    risk = weather_risk(forecast)
+    # Stronger derate when we have a reliable peak reference
+    derate_factor = 0.6 if forecast.peak_reference_w is not None else 0.3
+    derate = max(1.0 - risk * derate_factor, 0.2)
+    return round(forecast.tomorrow_kwh * derate, 3)
 
 
 # ---------------------------------------------------------------------------

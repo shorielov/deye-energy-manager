@@ -17,9 +17,12 @@ from .const import (
     CONF_BATTERY_TEMPERATURE_ENTITY,
     CONF_DAY_RATE,
     CONF_FLAT_RATE,
+    CONF_FORECAST_PEAK_TODAY_ENTITY,
+    CONF_FORECAST_PEAK_TOMORROW_ENTITY,
     CONF_FORECAST_REMAINING_ENTITY,
     CONF_FORECAST_TODAY_ENTITY,
     CONF_FORECAST_TOMORROW_ENTITY,
+    CONF_PV_PEAK_KW,
     CONF_GRID_EXPORT_ENTITY,
     CONF_GRID_IMPORT_ENTITY,
     CONF_HOME_CONSUMPTION_ENTITY,
@@ -108,6 +111,18 @@ def _build_schema(user_input: Mapping[str, Any] | None = None) -> vol.Schema:
                 CONF_FORECAST_REMAINING_ENTITY,
                 description={"suggested_value": user_input.get(CONF_FORECAST_REMAINING_ENTITY)},
             ): selector({"entity": {"domain": "sensor", "device_class": "energy"}}),
+            vol.Optional(
+                CONF_FORECAST_PEAK_TODAY_ENTITY,
+                description={"suggested_value": user_input.get(CONF_FORECAST_PEAK_TODAY_ENTITY)},
+            ): selector({"entity": {"domain": "sensor", "device_class": "power"}}),
+            vol.Optional(
+                CONF_FORECAST_PEAK_TOMORROW_ENTITY,
+                description={"suggested_value": user_input.get(CONF_FORECAST_PEAK_TOMORROW_ENTITY)},
+            ): selector({"entity": {"domain": "sensor", "device_class": "power"}}),
+            vol.Optional(
+                CONF_PV_PEAK_KW,
+                description={"suggested_value": user_input.get(CONF_PV_PEAK_KW)},
+            ): selector({"number": {"min": 0.1, "max": 100, "step": 0.1, "unit_of_measurement": "kWp", "mode": "box"}}),
             vol.Required(
                 CONF_TARIFF_TYPE,
                 default=user_input.get(CONF_TARIFF_TYPE, TariffType.FLAT.value),
@@ -174,6 +189,9 @@ class SmartEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data = dict(user_input)
             data.setdefault(CONF_BATTERY_TEMPERATURE_ENTITY, None)
             data.setdefault(CONF_FORECAST_REMAINING_ENTITY, None)
+            data.setdefault(CONF_FORECAST_PEAK_TODAY_ENTITY, None)
+            data.setdefault(CONF_FORECAST_PEAK_TOMORROW_ENTITY, None)
+            data.setdefault(CONF_PV_PEAK_KW, None)
             data.setdefault(CONF_TODAY_LOAD_CONSUMPTION_ENTITY, None)
             data.setdefault(CONF_SMART_LOAD_TODAY_ENTITY, None)
             return self.async_create_entry(title="Smart Energy Manager", data=data)

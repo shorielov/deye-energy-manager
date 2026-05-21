@@ -21,9 +21,12 @@ from .const import (
     CONF_BATTERY_TEMPERATURE_ENTITY,
     CONF_DAY_RATE,
     CONF_FLAT_RATE,
+    CONF_FORECAST_PEAK_TODAY_ENTITY,
+    CONF_FORECAST_PEAK_TOMORROW_ENTITY,
     CONF_FORECAST_REMAINING_ENTITY,
     CONF_FORECAST_TODAY_ENTITY,
     CONF_FORECAST_TOMORROW_ENTITY,
+    CONF_PV_PEAK_KW,
     CONF_GRID_EXPORT_ENTITY,
     CONF_GRID_IMPORT_ENTITY,
     CONF_HOME_CONSUMPTION_ENTITY,
@@ -54,6 +57,7 @@ from .const import (
     TariffType,
 )
 from .consumption_forecast import ConsumptionForecaster
+from .pv_baseline import PvBaselineForecaster
 from .decision import decide
 from .decision.context import DecisionContext, SunTimes
 from .decision.signals import weather_risk
@@ -141,6 +145,7 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
 
         self._telemetry_history: deque[TelemetrySnapshot] = deque(maxlen=24 * 60)
         self._consumption_forecaster = ConsumptionForecaster(hass)
+        self._pv_baseline = PvBaselineForecaster(hass)
         self._last_applied_plan_hash: int | None = None
 
     async def _async_update_data(self) -> EnergyState:
@@ -224,6 +229,29 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             degrading=self._is_forecast_degrading(forecast),
         )
 
+        # PV baseline / peak reference
+        _pv_now = datetime.now(UTC)
+        peak_today_w = _float_state(self.hass, self._get_value(CONF_FORECAST_PEAK_TODAY_ENTITY))
+        peak_tomorrow_w = _float_state(self.hass, self._get_value(CONF_FORECAST_PEAK_TOMORROW_ENTITY))
+        peak_ref_w, _peak_samples = await self._pv_baseline.async_peak_reference_w(
+            self._get_value(CONF_FORECAST_PEAK_TODAY_ENTITY), _pv_now
+        )
+        pv_peak_kw = self._safe_float(self._get_value(CONF_PV_PEAK_KW))
+        if pv_peak_kw is not None:
+            configured_ref = pv_peak_kw * 1000.0 * 0.85
+            peak_ref_w = max(peak_ref_w or 0.0, configured_ref) or None
+        baseline_kwh, baseline_samples = await self._pv_baseline.async_baseline_kwh(
+            self._get_value(CONF_FORECAST_TODAY_ENTITY), _pv_now
+        )
+        forecast = replace(
+            forecast,
+            peak_today_w=peak_today_w,
+            peak_tomorrow_w=peak_tomorrow_w,
+            peak_reference_w=peak_ref_w,
+            baseline_kwh=baseline_kwh,
+            baseline_samples=baseline_samples,
+        )
+
         tariff = self._build_tariff_config()
         battery = self._build_battery_config()
         min_soc = self._safe_int(self._get_value(CONF_MIN_SOC_OVERRIDE)) or DEFAULT_MIN_SOC
@@ -268,6 +296,7 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
 
         self._telemetry_history.clear()
         self._consumption_forecaster.invalidate_cache()
+        self._pv_baseline.invalidate_cache()
         await self.async_request_refresh()
 
     def _get_value(self, key: str) -> Any:

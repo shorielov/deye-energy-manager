@@ -12,6 +12,7 @@ from custom_components.smart_energy_manager.decision.signals import (
     headroom_battery_kwh,
     is_cheap_window,
     rate_delta,
+    risk_adjusted_pv_kwh,
     time_until_cheap_window,
     time_until_expensive_window,
     weather_risk,
@@ -180,6 +181,60 @@ class TestWeatherRisk:
     def test_none_confidence_returns_mid_range(self):
         r = weather_risk(_forecast(confidence=None))
         assert 0.0 <= r <= 1.0
+
+    def test_peak_path_clear_day(self):
+        f = _forecast(peak_today_w=4000.0, peak_tomorrow_w=4000.0, peak_reference_w=4000.0)
+        assert weather_risk(f) < 0.1
+
+    def test_peak_path_cloudy(self):
+        f = _forecast(peak_today_w=4000.0, peak_tomorrow_w=2000.0, peak_reference_w=4000.0)
+        assert weather_risk(f) > 0.5
+
+    def test_peak_path_today_drop_adds_bonus(self):
+        no_drop = _forecast(peak_today_w=4000.0, peak_tomorrow_w=3000.0, peak_reference_w=4000.0)
+        with_drop = _forecast(peak_today_w=4000.0, peak_tomorrow_w=2000.0, peak_reference_w=4000.0)
+        assert weather_risk(with_drop) > weather_risk(no_drop)
+
+    def test_fallback_kwh_path(self):
+        f = _forecast(tomorrow_kwh=10.0, baseline_kwh=20.0, baseline_samples=7)
+        assert weather_risk(f) > 0.5
+
+    def test_baseline_small_sample_adds_penalty(self):
+        f_many = _forecast(tomorrow_kwh=15.0, baseline_kwh=20.0, baseline_samples=7)
+        f_few = _forecast(tomorrow_kwh=15.0, baseline_kwh=20.0, baseline_samples=3)
+        assert weather_risk(f_few) > weather_risk(f_many)
+
+
+# ---------------------------------------------------------------------------
+# risk_adjusted_pv_kwh
+# ---------------------------------------------------------------------------
+
+
+class TestRiskAdjustedPvKwh:
+    def test_returns_none_when_no_tomorrow(self):
+        assert risk_adjusted_pv_kwh(_forecast()) is None
+
+    def test_peak_based_strong_derate(self):
+        # peak_tomorrow=2000, ref=4000 → cloudy, risk>0.5 → strong derate
+        f = _forecast(
+            tomorrow_kwh=20.0,
+            peak_today_w=4000.0,
+            peak_tomorrow_w=2000.0,
+            peak_reference_w=4000.0,
+        )
+        adj = risk_adjusted_pv_kwh(f)
+        assert adj is not None and adj < 20.0
+        assert adj > 0
+
+    def test_clear_day_minimal_derate(self):
+        f = _forecast(tomorrow_kwh=20.0, peak_tomorrow_w=4000.0, peak_reference_w=4000.0)
+        adj = risk_adjusted_pv_kwh(f)
+        assert adj is not None and adj > 18.0
+
+    def test_cold_start_mild_derate(self):
+        f = _forecast(tomorrow_kwh=20.0, confidence=0.5)
+        adj = risk_adjusted_pv_kwh(f)
+        assert adj is not None and 0 < adj <= 20.0
 
 
 # ---------------------------------------------------------------------------
