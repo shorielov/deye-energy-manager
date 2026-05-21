@@ -256,18 +256,19 @@ views:
 
           # plan summary tile
           - type: custom:mushroom-template-card
-            primary: >-
-              {{ states('sensor.smart_energy_manager_plan') }} strategy
+            entity: sensor.smart_energy_manager_energy_plan
+            primary: "{{ states('sensor.smart_energy_manager_energy_plan') }} strategy"
             secondary: >-
-              Est. savings: {{ state_attr('sensor.smart_energy_manager_plan',
-              'estimated_savings_uah') | round(2) }} UAH ·
-              Balance: {{ state_attr('sensor.smart_energy_manager_plan',
-              'expected_balance_kwh') | round(2) }} kWh
+              Est. savings: {{ state_attr('sensor.smart_energy_manager_energy_plan',
+              'estimated_savings_uah') | round(2) }} UAH · Balance: {{
+              state_attr('sensor.smart_energy_manager_energy_plan', 'expected_balance_kwh')
+              | round(2) }} kWh
             icon: mdi:chart-timeline-variant
-            icon_color: blue
             tap_action:
-              action: more-info
-              entity: sensor.smart_energy_manager_plan
+            action: more-info
+            color: blue
+            features_position: bottom
+            area: summer_kitchen
 
           # 6 TOU slots
           - type: grid
@@ -374,8 +375,6 @@ views:
           show: true
           title: Forecast Balance — last 7 days (kWh)
         graph_span: 7d
-        span:
-          end: now
         series:
           - entity: sensor.smart_energy_manager_forecast_balance
             name: Forecast balance
@@ -391,8 +390,6 @@ views:
           show: true
           title: Energy Score & Grid Dependency — last 7 days (%)
         graph_span: 7d
-        span:
-          end: now
         apex_config:
           yaxis:
             min: 0
@@ -418,8 +415,6 @@ views:
           show: true
           title: Bad Weather Risk — last 7 days (%)
         graph_span: 7d
-        span:
-          end: now
         apex_config:
           yaxis:
             min: 0
