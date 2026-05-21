@@ -50,8 +50,9 @@ async def async_setup_entry(
     """Set up Smart Energy binary sensors."""
 
     coordinator: SmartEnergyCoordinator = hass.data[DOMAIN][entry.entry_id]
+    all_descriptions = list(BINARY_SENSORS) + _plan_slot_charge_sensors()
     async_add_entities(
-        SmartEnergyBinarySensor(coordinator, description) for description in BINARY_SENSORS
+        SmartEnergyBinarySensor(coordinator, description) for description in all_descriptions
     )
 
 
@@ -75,3 +76,27 @@ class SmartEnergyBinarySensor(SmartEnergyEntity, BinarySensorEntity):
         """Return the binary state."""
 
         return self.entity_description.value_fn(self.coordinator.data)
+
+
+# ---------------------------------------------------------------------------
+# Plan slot charge sensors
+# ---------------------------------------------------------------------------
+
+
+def _slot_charge_value(n: int) -> Callable[[EnergyState], bool]:
+    def fn(state: EnergyState) -> bool:
+        if state.plan is None or len(state.plan.slots) < n:
+            return False
+        return state.plan.slots[n - 1].charge_from_grid
+    return fn
+
+
+def _plan_slot_charge_sensors() -> list[SmartEnergyBinarySensorDescription]:
+    return [
+        SmartEnergyBinarySensorDescription(
+            key=f"plan_slot_{n}_charge",
+            name=f"Plan Slot {n} Charge",
+            value_fn=_slot_charge_value(n),
+        )
+        for n in range(1, 7)
+    ]

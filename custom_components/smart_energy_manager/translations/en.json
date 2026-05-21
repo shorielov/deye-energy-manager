@@ -27,6 +27,8 @@
           "night_end": "Night tariff end",
           "mode": "Default mode",
           "auto_apply_recommendations": "Auto apply recommendations",
+          "inverter_adapter": "Inverter adapter",
+          "sunsynk_entity_prefix": "Sunsynk entity prefix (optional)",
           "scan_interval_seconds": "Refresh interval (seconds)"
         }
       }
@@ -60,6 +62,8 @@
           "night_end": "Night tariff end",
           "mode": "Default mode",
           "auto_apply_recommendations": "Auto apply recommendations",
+          "inverter_adapter": "Inverter adapter",
+          "sunsynk_entity_prefix": "Sunsynk entity prefix (optional)",
           "scan_interval_seconds": "Refresh interval (seconds)"
         }
       }
@@ -80,6 +84,12 @@
         "backup": "Backup",
         "balanced": "Balanced"
       }
+    },
+    "inverter_adapter": {
+      "options": {
+        "none": "None (manual automations)",
+        "sunsynk": "Sunsynk / Deye (kellerza)"
+      }
     }
   },
   "entity": {
@@ -89,12 +99,31 @@
       "bad_weather_risk": {"name": "Bad Weather Risk"},
       "recommended_pv": {"name": "Recommended PV Expansion"},
       "grid_dependency": {"name": "Grid Dependency"},
-      "energy_score": {"name": "Energy Score"}
+      "energy_score": {"name": "Energy Score"},
+      "plan": {"name": "Energy Plan"},
+      "plan_slot_1_start": {"name": "Plan Slot 1 Start"},
+      "plan_slot_1_target_soc": {"name": "Plan Slot 1 Target SOC"},
+      "plan_slot_2_start": {"name": "Plan Slot 2 Start"},
+      "plan_slot_2_target_soc": {"name": "Plan Slot 2 Target SOC"},
+      "plan_slot_3_start": {"name": "Plan Slot 3 Start"},
+      "plan_slot_3_target_soc": {"name": "Plan Slot 3 Target SOC"},
+      "plan_slot_4_start": {"name": "Plan Slot 4 Start"},
+      "plan_slot_4_target_soc": {"name": "Plan Slot 4 Target SOC"},
+      "plan_slot_5_start": {"name": "Plan Slot 5 Start"},
+      "plan_slot_5_target_soc": {"name": "Plan Slot 5 Target SOC"},
+      "plan_slot_6_start": {"name": "Plan Slot 6 Start"},
+      "plan_slot_6_target_soc": {"name": "Plan Slot 6 Target SOC"}
     },
     "binary_sensor": {
       "should_charge": {"name": "Should Charge"},
       "bad_weather": {"name": "Bad Weather"},
-      "energy_deficit": {"name": "Energy Deficit"}
+      "energy_deficit": {"name": "Energy Deficit"},
+      "plan_slot_1_charge": {"name": "Plan Slot 1 Charge"},
+      "plan_slot_2_charge": {"name": "Plan Slot 2 Charge"},
+      "plan_slot_3_charge": {"name": "Plan Slot 3 Charge"},
+      "plan_slot_4_charge": {"name": "Plan Slot 4 Charge"},
+      "plan_slot_5_charge": {"name": "Plan Slot 5 Charge"},
+      "plan_slot_6_charge": {"name": "Plan Slot 6 Charge"}
     },
     "switch": {
       "eco_mode": {"name": "ECO Mode"},

@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_AUTO_APPLY_RECOMMENDATIONS,
     CONF_BATTERY_CAPACITY_KWH,
     CONF_BATTERY_POWER_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -26,6 +27,7 @@ from .const import (
     CONF_GRID_EXPORT_ENTITY,
     CONF_GRID_IMPORT_ENTITY,
     CONF_HOME_CONSUMPTION_ENTITY,
+    CONF_INVERTER_ADAPTER,
     CONF_MIN_SOC_OVERRIDE,
     CONF_MODE,
     CONF_NIGHT_END,
@@ -35,6 +37,7 @@ from .const import (
     CONF_PV_POWER_ENTITY,
     CONF_SCAN_INTERVAL_SECONDS,
     CONF_SMART_LOAD_TODAY_ENTITY,
+    CONF_SUNSYNK_ENTITY_PREFIX,
     CONF_TARGET_SOC_OVERRIDE,
     CONF_TARIFF_TYPE,
     CONF_TODAY_LOAD_CONSUMPTION_ENTITY,
@@ -46,10 +49,14 @@ from .const import (
     DEFAULT_TARGET_SOC,
     DOMAIN,
     EnergyMode,
+    InverterAdapterType,
     TariffType,
 )
 from .consumption_forecast import ConsumptionForecaster
-from .models import BatteryConfig, EnergyState, ForecastSnapshot, Recommendation, TariffConfig, TelemetrySnapshot
+from .decision import decide
+from .decision.context import DecisionContext, SunTimes
+from .decision.signals import weather_risk
+from .models import BatteryConfig, EnergyState, ForecastSnapshot, Plan, Recommendation, TariffConfig, TelemetrySnapshot
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -133,6 +140,7 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
 
         self._telemetry_history: deque[TelemetrySnapshot] = deque(maxlen=24 * 60)
         self._consumption_forecaster = ConsumptionForecaster(hass)
+        self._last_applied_plan_hash: int | None = None
 
     async def _async_update_data(self) -> EnergyState:
         """Fetch states from Home Assistant and build a normalized payload."""
@@ -188,6 +196,15 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             consumption_confidence = None
             consumption_source = ConsumptionSource.NONE
 
+        # 3) Live-counter extrapolation: when tomorrow is unknown, project today's pace
+        if consumption_tomorrow is None and live_baseline_today is not None:
+            _now = dt_util.now()
+            hours_elapsed = _now.hour + _now.minute / 60.0
+            if hours_elapsed > 0:
+                consumption_tomorrow = round(live_baseline_today * 24.0 / hours_elapsed, 3)
+                consumption_confidence = 0.3
+                consumption_source = ConsumptionSource.FALLBACK
+
         # Resolve today consumption: live baseline beats power-based estimate
         consumption_today = live_baseline_today if live_baseline_today is not None else pw_today
 
@@ -206,15 +223,44 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             degrading=self._is_forecast_degrading(forecast),
         )
 
-        recommendation = self._build_placeholder_recommendation(telemetry, forecast)
-        return EnergyState(
+        tariff = self._build_tariff_config()
+        battery = self._build_battery_config()
+        min_soc = self._safe_int(self._get_value(CONF_MIN_SOC_OVERRIDE)) or DEFAULT_MIN_SOC
+        target_soc = self._safe_int(self._get_value(CONF_TARGET_SOC_OVERRIDE)) or DEFAULT_TARGET_SOC
+        mode = EnergyMode(self._get_value(CONF_MODE) or EnergyMode.BALANCED)
+
+        sun_times = self._get_sun_times()
+        ctx = DecisionContext(
+            telemetry=telemetry,
+            forecast=forecast,
+            tariff=tariff,
+            battery=battery,
+            mode=mode,
+            now=dt_util.now(),
+            min_soc=min_soc,
+            target_soc=target_soc,
+            sun=sun_times,
+        )
+        plan = decide(ctx)
+        recommendation = self._recommendation_from_plan(plan, ctx)
+
+        state = EnergyState(
             telemetry=telemetry,
             forecast=forecast,
             recommendation=recommendation,
-            tariff=self._build_tariff_config(),
-            battery=self._build_battery_config(),
+            tariff=tariff,
+            battery=battery,
             last_update_success=True,
+            plan=plan,
         )
+
+        if (
+            self._get_value(CONF_AUTO_APPLY_RECOMMENDATIONS)
+            and self._get_value(CONF_INVERTER_ADAPTER) not in (None, InverterAdapterType.NONE, "none")
+        ):
+            await self._apply_plan(plan)
+
+        return state
 
     async def async_clear_history(self) -> None:
         """Clear in-memory history."""
@@ -254,46 +300,63 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             target_soc_override=self._safe_int(self._get_value(CONF_TARGET_SOC_OVERRIDE)),
         )
 
-    def _build_placeholder_recommendation(
-        self,
-        telemetry: TelemetrySnapshot,
-        forecast: ForecastSnapshot,
-    ) -> Recommendation:
-        """Return a minimal recommendation until the decision engine is implemented."""
+    def _get_sun_times(self) -> SunTimes | None:
+        """Fetch today's sunrise/sunset from the HA sun integration."""
+        try:
+            from homeassistant.helpers import sun as sun_helper  # noqa: PLC0415
+            from datetime import timedelta  # noqa: PLC0415
 
-        target_soc = self._safe_int(self._get_value(CONF_TARGET_SOC_OVERRIDE)) or DEFAULT_TARGET_SOC
-        min_soc = self._safe_int(self._get_value(CONF_MIN_SOC_OVERRIDE)) or DEFAULT_MIN_SOC
-        expected_balance = None
-        if forecast.tomorrow_kwh is not None:
-            consumption_proxy = forecast.consumption_tomorrow_kwh
-            if consumption_proxy is None and telemetry.today_load_consumption_kwh is not None:
-                smart = telemetry.smart_load_today_kwh or 0.0
-                live_today = max(telemetry.today_load_consumption_kwh - smart, 0.0)
-                now = dt_util.now()
-                hours_elapsed = max(now.hour + now.minute / 60.0, 2.0)
-                consumption_proxy = live_today * 24.0 / hours_elapsed
-            if consumption_proxy is not None:
-                expected_balance = forecast.tomorrow_kwh - consumption_proxy
+            today_start = dt_util.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            rising = sun_helper.get_astral_event_next(self.hass, "sunrise", today_start)
+            setting = sun_helper.get_astral_event_next(self.hass, "sunset", today_start)
+            local = dt_util.DEFAULT_TIME_ZONE
+            return SunTimes(
+                sunrise=rising.astimezone(local).time().replace(second=0, microsecond=0),
+                sunset=setting.astimezone(local).time().replace(second=0, microsecond=0),
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Sun times unavailable; strategies will use defaults")
+            return None
 
-        should_charge = bool(
-            forecast.tomorrow_kwh is not None
-            and expected_balance is not None
-            and expected_balance < 0
-            and telemetry.battery_soc < target_soc
-        )
-
+    @staticmethod
+    def _recommendation_from_plan(plan: Plan, ctx: DecisionContext) -> Recommendation:
+        """Derive a backward-compatible Recommendation from the plan."""
+        charges = any(s.charge_from_grid for s in plan.slots)
+        first_slot = plan.slots[0] if plan.slots else None
         return Recommendation(
-            charge_from_grid=should_charge,
-            target_soc=target_soc,
-            min_soc=min_soc,
-            expected_balance_kwh=expected_balance,
-            estimated_savings=0.0,
-            active_mode=EnergyMode(self._get_value(CONF_MODE) or EnergyMode.BALANCED),
-            bad_weather_risk=1.0 - (forecast.confidence or 0.5),
-            should_charge=should_charge,
-            energy_deficit=bool(expected_balance is not None and expected_balance < 0),
-            messages=["Decision engine placeholder output"],
+            charge_from_grid=charges,
+            target_soc=first_slot.target_soc if first_slot else ctx.target_soc,
+            min_soc=ctx.min_soc,
+            expected_balance_kwh=plan.expected_balance_kwh,
+            estimated_savings=plan.estimated_savings_uah,
+            active_mode=ctx.mode,
+            reason_codes=[s.reason for s in plan.slots[:1]],
+            messages=list(plan.notes),
+            bad_weather_risk=weather_risk(ctx.forecast),
+            should_charge=charges,
+            energy_deficit=plan.expected_balance_kwh is not None and plan.expected_balance_kwh < 0,
         )
+
+    async def _apply_plan(self, plan: Plan) -> None:
+        """Write plan to inverter via the configured adapter (throttled to changes)."""
+        from .adapters import get_adapter  # noqa: PLC0415
+
+        plan_hash = hash(
+            tuple((s.start_time, s.target_soc, s.charge_from_grid) for s in plan.slots)
+        )
+        if plan_hash == self._last_applied_plan_hash:
+            return
+
+        adapter_type = self._get_value(CONF_INVERTER_ADAPTER) or InverterAdapterType.NONE
+        prefix = self._get_value(CONF_SUNSYNK_ENTITY_PREFIX) or ""
+        adapter = get_adapter(str(adapter_type), str(prefix))
+
+        try:
+            await adapter.async_apply_plan(self.hass, plan)
+            self._last_applied_plan_hash = plan_hash
+            _LOGGER.debug("Plan applied via %s adapter", adapter.name)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Failed to apply plan via %s adapter", adapter.name)
 
     def _estimate_consumption_forecast(self) -> tuple[float | None, float | None, float | None]:
         """Estimate daily home consumption (kWh) from telemetry history.

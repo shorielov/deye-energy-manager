@@ -39,6 +39,8 @@ CONF_AUTO_APPLY_RECOMMENDATIONS = "auto_apply_recommendations"
 CONF_MIN_SOC_OVERRIDE = "min_soc_override"
 CONF_TARGET_SOC_OVERRIDE = "target_soc_override"
 CONF_SCAN_INTERVAL_SECONDS = "scan_interval_seconds"
+CONF_INVERTER_ADAPTER = "inverter_adapter"
+CONF_SUNSYNK_ENTITY_PREFIX = "sunsynk_entity_prefix"
 
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=60)
 DEFAULT_MIN_SOC = 20
@@ -91,6 +93,13 @@ class ConsumptionSource(StrEnum):
     NONE = "none"
 
 
+class InverterAdapterType(StrEnum):
+    """Supported inverter adapter integrations."""
+
+    NONE = "none"
+    SUNSYNK = "sunsynk"
+
+
 class RecommendationCode(StrEnum):
     """Decision rationale codes."""
 
@@ -100,3 +109,7 @@ class RecommendationCode(StrEnum):
     WINTER_GUARD = "winter_guard"
     BATTERY_PROTECTION = "battery_protection"
     MISSING_DATA = "missing_data"
+    PV_PRIORITY = "pv_priority"
+    NO_GRID_CHARGE = "no_grid_charge"
+    BACKUP_MODE = "backup_mode"
+    INSUFFICIENT_DEFICIT = "insufficient_deficit"

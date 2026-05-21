@@ -23,6 +23,8 @@ from .const import (
     CONF_GRID_EXPORT_ENTITY,
     CONF_GRID_IMPORT_ENTITY,
     CONF_HOME_CONSUMPTION_ENTITY,
+    CONF_INVERTER_ADAPTER,
+    CONF_MIN_SOC_OVERRIDE,
     CONF_MODE,
     CONF_NIGHT_END,
     CONF_NIGHT_RATE,
@@ -31,11 +33,14 @@ from .const import (
     CONF_PV_POWER_ENTITY,
     CONF_SCAN_INTERVAL_SECONDS,
     CONF_SMART_LOAD_TODAY_ENTITY,
+    CONF_SUNSYNK_ENTITY_PREFIX,
+    CONF_TARGET_SOC_OVERRIDE,
     CONF_TARIFF_TYPE,
     CONF_TODAY_LOAD_CONSUMPTION_ENTITY,
     DEFAULT_SCAN_INTERVAL_SECONDS,
     DOMAIN,
     EnergyMode,
+    InverterAdapterType,
     TariffType,
 )
 
@@ -134,6 +139,14 @@ def _build_schema(user_input: Mapping[str, Any] | None = None) -> vol.Schema:
                 CONF_AUTO_APPLY_RECOMMENDATIONS,
                 default=user_input.get(CONF_AUTO_APPLY_RECOMMENDATIONS, False),
             ): selector({"boolean": {}}),
+            vol.Required(
+                CONF_INVERTER_ADAPTER,
+                default=user_input.get(CONF_INVERTER_ADAPTER, InverterAdapterType.NONE.value),
+            ): selector({"select": {"options": [a.value for a in InverterAdapterType], "translation_key": "inverter_adapter", "mode": "dropdown"}}),
+            vol.Optional(
+                CONF_SUNSYNK_ENTITY_PREFIX,
+                description={"suggested_value": user_input.get(CONF_SUNSYNK_ENTITY_PREFIX, "")},
+            ): selector({"text": {}}),
             vol.Required(
                 CONF_SCAN_INTERVAL_SECONDS,
                 default=user_input.get(CONF_SCAN_INTERVAL_SECONDS, DEFAULT_SCAN_INTERVAL_SECONDS),

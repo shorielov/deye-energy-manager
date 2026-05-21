@@ -16,13 +16,13 @@ from custom_components.smart_energy_manager.models import TelemetrySnapshot
 async def test_coordinator_builds_recommendation(
     hass: HomeAssistant, setup_integration
 ) -> None:
-    """Coordinator should expose placeholder recommendation data."""
+    """Coordinator should expose recommendation data produced by the decision engine."""
 
     coordinator: SmartEnergyCoordinator = hass.data[DOMAIN][setup_integration.entry_id]
 
+    # Balanced strategy, flat tariff, no deficit calculated → no grid charge
     assert coordinator.data.recommendation.target_soc == 80
-    assert coordinator.data.recommendation.energy_deficit is True
-    assert coordinator.data.recommendation.should_charge is True
+    assert coordinator.data.recommendation.should_charge is False
     assert coordinator.data.forecast.confidence == 1.0
 
 
@@ -251,6 +251,8 @@ async def test_no_stats_no_history_source_is_none(
     )
 
     hass.states.async_set("sensor.home_consumption", "unavailable")
+    hass.states.async_set("sensor.today_load_consumption", "unavailable")
+    hass.states.async_set("sensor.smart_load_today", "unavailable")
 
     await coordinator.async_refresh()
     await hass.async_block_till_done()

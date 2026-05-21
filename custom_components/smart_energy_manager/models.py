@@ -9,6 +9,28 @@ from .const import ConsumptionSource, EnergyMode, RecommendationCode, TariffType
 
 
 @dataclass(slots=True)
+class PlanSlot:
+    """A single TOU inverter slot."""
+
+    start_time: time
+    target_soc: int
+    charge_from_grid: bool
+    max_power_w: int | None = None
+    reason: RecommendationCode = RecommendationCode.MISSING_DATA
+
+
+@dataclass(slots=True)
+class Plan:
+    """Full 6-slot daily plan produced by a strategy."""
+
+    slots: list[PlanSlot]
+    generated_at: datetime
+    strategy: str
+    estimated_savings_uah: float = 0.0
+    expected_balance_kwh: float | None = None
+    notes: list[str] = field(default_factory=list)
+
+@dataclass(slots=True)
 class TariffConfig:
     """Resolved tariff configuration."""
 
@@ -88,3 +110,4 @@ class EnergyState:
     tariff: TariffConfig
     battery: BatteryConfig
     last_update_success: bool = True
+    plan: Plan | None = None
