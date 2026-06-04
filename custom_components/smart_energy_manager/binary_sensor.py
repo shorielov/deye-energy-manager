@@ -10,7 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import DEFAULT_BAD_WEATHER_THRESHOLD, DOMAIN
 from .coordinator import SmartEnergyCoordinator
 from .entity import SmartEnergyEntity
 from .models import EnergyState
@@ -32,7 +32,7 @@ BINARY_SENSORS: tuple[SmartEnergyBinarySensorDescription, ...] = (
     SmartEnergyBinarySensorDescription(
         key="bad_weather",
         name="Bad Weather",
-        value_fn=lambda state: (state.recommendation.bad_weather_risk or 0) >= 0.65,
+        value_fn=lambda state: (state.recommendation.bad_weather_risk or 0) >= DEFAULT_BAD_WEATHER_THRESHOLD,
     ),
     SmartEnergyBinarySensorDescription(
         key="energy_deficit",

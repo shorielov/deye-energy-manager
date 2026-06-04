@@ -120,18 +120,14 @@ def weather_risk(forecast: ForecastSnapshot) -> float:
 
     Path A (primary): peak_tomorrow_w / peak_reference_w clearness ratio.
     Path B (fallback): tomorrow_kwh vs baseline_kwh ratio.
-    Path C (cold-start): data completeness only — unreliable for first ~2 weeks.
+    Path C (cold-start): no reference data — returns 0.5 (neutral unknown).
     """
     risk: float
 
     if forecast.peak_tomorrow_w is not None and forecast.peak_reference_w is not None:
         # Path A — peak-based clearness ratio
-        clearness = min(forecast.peak_tomorrow_w / forecast.peak_reference_w, 1.2)
-        risk = min((1.0 - clearness) * 1.3, 1.0)
-        risk = max(risk, 0.0)
-        if forecast.peak_today_w is not None and forecast.peak_today_w > 0:
-            drop = max(0.0, 1.0 - forecast.peak_tomorrow_w / forecast.peak_today_w)
-            risk = min(1.0, risk + drop * 0.3)
+        clearness = min(forecast.peak_tomorrow_w / forecast.peak_reference_w, 1.0)
+        risk = max(1.0 - clearness, 0.0)
     elif (
         forecast.baseline_kwh is not None
         and forecast.tomorrow_kwh is not None
@@ -145,8 +141,8 @@ def weather_risk(forecast: ForecastSnapshot) -> float:
         if forecast.baseline_samples < 5:
             risk = min(1.0, risk + 0.1)
     else:
-        # Path C — cold-start: data completeness only
-        risk = 1.0 - (forecast.confidence or 0.5)
+        # Path C — cold-start: no reference data; treat as neutral unknown
+        risk = 0.5
 
     if forecast.degrading:
         risk = min(1.0, risk + 0.15)

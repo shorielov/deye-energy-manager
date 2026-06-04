@@ -8,7 +8,7 @@ from ..base import Strategy
 from ..context import DecisionContext
 from ..plan import collapse_to_six, estimate_savings_uah
 from ..signals import expected_deficit_kwh, headroom_battery_kwh, risk_adjusted_pv_kwh, weather_risk
-from ...const import RecommendationCode, TariffType
+from ...const import DEFAULT_BAD_WEATHER_THRESHOLD, RecommendationCode, TariffType
 from ...models import Plan, PlanSlot
 
 
@@ -51,7 +51,7 @@ class BalancedStrategy(Strategy):
                 adj_deficit = round(ctx.forecast.consumption_tomorrow_kwh - pv_for_deficit, 3)
 
         # Lower grid-charge threshold when weather risk is high
-        grid_charge_threshold = 1.0 if risk > 0.5 else 2.0
+        grid_charge_threshold = 1.0 if risk > DEFAULT_BAD_WEATHER_THRESHOLD else 2.0
 
         use_grid = (
             ctx.tariff.tariff_type == TariffType.DUAL

@@ -167,33 +167,31 @@ class TestHeadroomBatteryKwh:
 
 
 class TestWeatherRisk:
-    def test_high_confidence_low_risk(self):
-        assert weather_risk(_forecast(confidence=0.95)) < 0.2
-
-    def test_low_confidence_high_risk(self):
-        assert weather_risk(_forecast(confidence=0.2)) > 0.6
+    def test_cold_start_returns_neutral(self):
+        # Path C: no peak/baseline data → fixed 0.5 regardless of confidence
+        assert weather_risk(_forecast(confidence=0.95)) == pytest.approx(0.5)
+        assert weather_risk(_forecast(confidence=0.2)) == pytest.approx(0.5)
+        assert weather_risk(_forecast(confidence=None)) == pytest.approx(0.5)
 
     def test_degrading_increases_risk(self):
         base = weather_risk(_forecast(confidence=0.8, degrading=False))
         with_deg = weather_risk(_forecast(confidence=0.8, degrading=True))
         assert with_deg > base
 
-    def test_none_confidence_returns_mid_range(self):
-        r = weather_risk(_forecast(confidence=None))
-        assert 0.0 <= r <= 1.0
-
     def test_peak_path_clear_day(self):
         f = _forecast(peak_today_w=4000.0, peak_tomorrow_w=4000.0, peak_reference_w=4000.0)
         assert weather_risk(f) < 0.1
 
     def test_peak_path_cloudy(self):
+        # 50% of reference → clearness=0.5, risk=0.5
         f = _forecast(peak_today_w=4000.0, peak_tomorrow_w=2000.0, peak_reference_w=4000.0)
-        assert weather_risk(f) > 0.5
+        assert weather_risk(f) == pytest.approx(0.5)
 
-    def test_peak_path_today_drop_adds_bonus(self):
-        no_drop = _forecast(peak_today_w=4000.0, peak_tomorrow_w=3000.0, peak_reference_w=4000.0)
-        with_drop = _forecast(peak_today_w=4000.0, peak_tomorrow_w=2000.0, peak_reference_w=4000.0)
-        assert weather_risk(with_drop) > weather_risk(no_drop)
+    def test_peak_path_no_drop_bonus(self):
+        # Drop in today→tomorrow no longer adds extra penalty; only clearness vs reference matters
+        no_drop = _forecast(peak_today_w=4000.0, peak_tomorrow_w=2000.0, peak_reference_w=4000.0)
+        with_drop = _forecast(peak_today_w=5000.0, peak_tomorrow_w=2000.0, peak_reference_w=4000.0)
+        assert weather_risk(no_drop) == weather_risk(with_drop)
 
     def test_fallback_kwh_path(self):
         f = _forecast(tomorrow_kwh=10.0, baseline_kwh=20.0, baseline_samples=7)

@@ -256,9 +256,8 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             self._get_value(CONF_FORECAST_PEAK_TODAY_ENTITY), _pv_now
         )
         pv_peak_kw = self._safe_float(self._get_value(CONF_PV_PEAK_KW))
-        if pv_peak_kw is not None:
-            configured_ref = pv_peak_kw * 1000.0 * 0.85
-            peak_ref_w = max(peak_ref_w or 0.0, configured_ref) or None
+        if peak_ref_w is None and pv_peak_kw is not None:
+            peak_ref_w = pv_peak_kw * 1000.0 * 0.85
         baseline_kwh, baseline_samples = await self._pv_baseline.async_baseline_kwh(
             self._get_value(CONF_FORECAST_TODAY_ENTITY), _pv_now
         )
@@ -305,7 +304,11 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             balance_imbalance=balance_imbalance,
             balance_last_run=self._balance_last_run,
         )
-        plan = decide(ctx)
+        try:
+            plan = decide(ctx)
+        except Exception:
+            _LOGGER.exception("Strategy evaluation failed; aborting update")
+            raise UpdateFailed("Strategy evaluation failed")
         recommendation = self._recommendation_from_plan(plan, ctx)
 
         state = EnergyState(
@@ -365,8 +368,8 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             flat_rate=self._safe_float(self._get_value(CONF_FLAT_RATE)),
             day_rate=self._safe_float(self._get_value(CONF_DAY_RATE)),
             night_rate=self._safe_float(self._get_value(CONF_NIGHT_RATE)),
-            night_start=self._get_value(CONF_NIGHT_START),
-            night_end=self._get_value(CONF_NIGHT_END),
+            night_start=self._safe_time(self._get_value(CONF_NIGHT_START)),
+            night_end=self._safe_time(self._get_value(CONF_NIGHT_END)),
         )
 
     def _build_battery_config(self) -> BatteryConfig:
@@ -518,6 +521,19 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
         if forecast.today_kwh is None or forecast.tomorrow_kwh is None:
             return False
         return forecast.tomorrow_kwh < forecast.today_kwh * 0.75
+
+    @staticmethod
+    def _safe_time(value: Any) -> "time | None":
+        """Parse a time value from config (string or datetime.time)."""
+        from datetime import time as _time  # noqa: PLC0415
+        if value in (None, ""):
+            return None
+        if isinstance(value, _time):
+            return value
+        try:
+            return _time.fromisoformat(str(value))
+        except (ValueError, AttributeError):
+            return None
 
     @staticmethod
     def _safe_float(value: Any) -> float | None:
