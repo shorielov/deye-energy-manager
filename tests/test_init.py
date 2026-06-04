@@ -12,3 +12,7 @@ async def test_setup_entry_creates_entities(hass: HomeAssistant, setup_integrati
     assert hass.states.get("binary_sensor.smart_energy_manager_should_charge") is not None
     assert hass.states.get("switch.smart_energy_manager_eco_mode") is not None
     assert hass.states.get("number.smart_energy_manager_target_soc_override") is not None
+    assert hass.states.get("switch.smart_energy_manager_balancing_mode") is not None or hass.states.get("switch.smart_energy_manager_battery_balancing_mode") is not None
+    assert hass.states.get("button.smart_energy_manager_start_balance") is not None or hass.states.get("button.smart_energy_manager_start_battery_balancing") is not None
+    assert hass.states.get("button.smart_energy_manager_cancel_balance") is not None or hass.states.get("button.smart_energy_manager_cancel_battery_balancing") is not None
+    assert hass.states.get("sensor.smart_energy_manager_balancing_status") is not None

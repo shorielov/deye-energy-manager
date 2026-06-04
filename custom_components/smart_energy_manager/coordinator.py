@@ -15,6 +15,15 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_AUTO_APPLY_RECOMMENDATIONS,
+    CONF_BALANCE_ALLOW_GRID,
+    CONF_BALANCE_COOLDOWN_DAYS,
+    CONF_BALANCE_IMBALANCE_ENTITY,
+    CONF_BALANCE_MAX_CHARGE_W,
+    CONF_BALANCE_MAX_RUNTIME_H,
+    CONF_BALANCE_STOP_THRESHOLD,
+    CONF_BALANCE_TARGET_SOC,
+    CONF_BALANCE_TRIGGER_THRESHOLD,
+    CONF_BALANCE_VOLTAGE_V,
     CONF_BATTERY_CAPACITY_KWH,
     CONF_BATTERY_POWER_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -46,6 +55,14 @@ from .const import (
     CONF_TARIFF_TYPE,
     CONF_TODAY_LOAD_CONSUMPTION_ENTITY,
     ConsumptionSource,
+    DEFAULT_BALANCE_ALLOW_GRID,
+    DEFAULT_BALANCE_COOLDOWN_DAYS,
+    DEFAULT_BALANCE_MAX_CHARGE_W,
+    DEFAULT_BALANCE_MAX_RUNTIME_H,
+    DEFAULT_BALANCE_STOP_THRESHOLD,
+    DEFAULT_BALANCE_TARGET_SOC,
+    DEFAULT_BALANCE_TRIGGER_THRESHOLD,
+    DEFAULT_BALANCE_VOLTAGE_V,
     DEFAULT_BATTERY_TEMPERATURE_C,
     DEFAULT_MIN_SOC,
     DEFAULT_SCAN_INTERVAL,
@@ -61,7 +78,7 @@ from .pv_baseline import PvBaselineForecaster
 from .decision import decide
 from .decision.context import DecisionContext, SunTimes
 from .decision.signals import weather_risk
-from .models import BatteryConfig, EnergyState, ForecastSnapshot, Plan, Recommendation, TariffConfig, TelemetrySnapshot
+from .models import BalanceConfig, BatteryConfig, EnergyState, ForecastSnapshot, Plan, Recommendation, TariffConfig, TelemetrySnapshot
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -147,6 +164,8 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
         self._consumption_forecaster = ConsumptionForecaster(hass)
         self._pv_baseline = PvBaselineForecaster(hass)
         self._last_applied_plan_hash: int | None = None
+        self._balance_requested: bool = False
+        self._balance_last_run: datetime | None = None
 
     async def _async_update_data(self) -> EnergyState:
         """Fetch states from Home Assistant and build a normalized payload."""
@@ -254,9 +273,21 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
 
         tariff = self._build_tariff_config()
         battery = self._build_battery_config()
+        balance = self._build_balance_config()
         min_soc = self._safe_int(self._get_value(CONF_MIN_SOC_OVERRIDE)) or DEFAULT_MIN_SOC
         target_soc = self._safe_int(self._get_value(CONF_TARGET_SOC_OVERRIDE)) or DEFAULT_TARGET_SOC
         mode = EnergyMode(self._get_value(CONF_MODE) or EnergyMode.BALANCED)
+
+        balance_imbalance = _float_state(self.hass, self._get_value(CONF_BALANCE_IMBALANCE_ENTITY))
+
+        # Auto-arm balance request when in BALANCING mode and imbalance crosses trigger
+        if (
+            mode == EnergyMode.BALANCING
+            and balance_imbalance is not None
+            and balance_imbalance >= balance.trigger_threshold
+            and not self._balance_requested
+        ):
+            self._balance_requested = True
 
         sun_times = self._get_sun_times()
         ctx = DecisionContext(
@@ -269,6 +300,10 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             min_soc=min_soc,
             target_soc=target_soc,
             sun=sun_times,
+            balance=balance,
+            balance_requested=self._balance_requested,
+            balance_imbalance=balance_imbalance,
+            balance_last_run=self._balance_last_run,
         )
         plan = decide(ctx)
         recommendation = self._recommendation_from_plan(plan, ctx)
@@ -281,7 +316,24 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             battery=battery,
             last_update_success=True,
             plan=plan,
+            balance_requested=self._balance_requested,
+            balance_imbalance=balance_imbalance,
+            balance_last_run=self._balance_last_run,
         )
+
+        # Clear balance_requested once imbalance drops below stop threshold
+        if (
+            mode == EnergyMode.BALANCING
+            and self._balance_requested
+            and balance_imbalance is not None
+            and balance_imbalance < balance.stop_threshold
+        ):
+            self._balance_requested = False
+            self._balance_last_run = datetime.now(UTC)
+            _LOGGER.info(
+                "Battery balancing complete: imbalance %.3f < stop threshold %.3f",
+                balance_imbalance, balance.stop_threshold,
+            )
 
         if (
             self._get_value(CONF_AUTO_APPLY_RECOMMENDATIONS)
@@ -329,6 +381,31 @@ class SmartEnergyCoordinator(DataUpdateCoordinator[EnergyState]):
             min_soc_override=self._safe_int(self._get_value(CONF_MIN_SOC_OVERRIDE)),
             target_soc_override=self._safe_int(self._get_value(CONF_TARGET_SOC_OVERRIDE)),
         )
+
+    def _build_balance_config(self) -> BalanceConfig:
+        """Resolve balance configuration from entry data."""
+        return BalanceConfig(
+            trigger_threshold=self._safe_float(self._get_value(CONF_BALANCE_TRIGGER_THRESHOLD)) or DEFAULT_BALANCE_TRIGGER_THRESHOLD,
+            stop_threshold=self._safe_float(self._get_value(CONF_BALANCE_STOP_THRESHOLD)) or DEFAULT_BALANCE_STOP_THRESHOLD,
+            max_charge_w=self._safe_int(self._get_value(CONF_BALANCE_MAX_CHARGE_W)) or DEFAULT_BALANCE_MAX_CHARGE_W,
+            target_soc=self._safe_int(self._get_value(CONF_BALANCE_TARGET_SOC)) or DEFAULT_BALANCE_TARGET_SOC,
+            allow_grid=bool(self._get_value(CONF_BALANCE_ALLOW_GRID) if self._get_value(CONF_BALANCE_ALLOW_GRID) is not None else DEFAULT_BALANCE_ALLOW_GRID),
+            max_runtime_h=self._safe_int(self._get_value(CONF_BALANCE_MAX_RUNTIME_H)) or DEFAULT_BALANCE_MAX_RUNTIME_H,
+            cooldown_days=self._safe_int(self._get_value(CONF_BALANCE_COOLDOWN_DAYS)) or DEFAULT_BALANCE_COOLDOWN_DAYS,
+            voltage_v=self._safe_float(self._get_value(CONF_BALANCE_VOLTAGE_V)) or DEFAULT_BALANCE_VOLTAGE_V,
+        )
+
+    async def request_balance(self) -> None:
+        """Arm the balancing mode and trigger a refresh."""
+        self._balance_requested = True
+        _LOGGER.info("Battery balancing manually requested")
+        await self.async_request_refresh()
+
+    async def cancel_balance(self) -> None:
+        """Cancel the active balancing request."""
+        self._balance_requested = False
+        _LOGGER.info("Battery balancing cancelled")
+        await self.async_request_refresh()
 
     def _get_sun_times(self) -> SunTimes | None:
         """Fetch today's sunrise/sunset from the HA sun integration."""

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import time
 
 from ..const import EnergyMode
-from ..models import BatteryConfig, ForecastSnapshot, TariffConfig, TelemetrySnapshot
+from ..models import BalanceConfig, BatteryConfig, ForecastSnapshot, TariffConfig, TelemetrySnapshot
 
 
 @dataclass(slots=True)
@@ -33,3 +33,7 @@ class DecisionContext:
     min_soc: int = 20
     target_soc: int = 80
     sun: SunTimes | None = None
+    balance: BalanceConfig | None = None
+    balance_requested: bool = False
+    balance_imbalance: float | None = None
+    balance_last_run: object | None = None  # datetime | None

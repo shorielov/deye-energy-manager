@@ -122,3 +122,21 @@ async def test_options_flow_saves_changes(hass: HomeAssistant) -> None:
     assert result["type"] == "create_entry"
     assert entry.options[CONF_BATTERY_CAPACITY_KWH] == 20.0
     assert entry.options[CONF_MODE] == EnergyMode.ECO.value
+
+
+async def test_options_flow_balancing_mode_round_trip(hass: HomeAssistant) -> None:
+    """Submitting BALANCING mode should persist in entry.options."""
+
+    entry = MockConfigEntry(domain=DOMAIN, title="Smart Energy Manager", data=_FULL_CONFIG)
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] == "form"
+
+    updated = dict(_FULL_CONFIG)
+    updated[CONF_MODE] = EnergyMode.BALANCING.value
+
+    result = await hass.config_entries.options.async_configure(result["flow_id"], updated)
+
+    assert result["type"] == "create_entry"
+    assert entry.options[CONF_MODE] == EnergyMode.BALANCING.value

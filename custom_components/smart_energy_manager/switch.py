@@ -23,6 +23,7 @@ async def async_setup_entry(
         [
             SmartEnergyModeSwitch(coordinator, "eco_mode", "ECO Mode", EnergyMode.ECO),
             SmartEnergyModeSwitch(coordinator, "winter_mode", "Winter Mode", EnergyMode.WINTER),
+            SmartEnergyModeSwitch(coordinator, "balancing_mode", "Battery Balancing Mode", EnergyMode.BALANCING),
             SmartEnergyOptionSwitch(
                 coordinator,
                 "auto_apply",

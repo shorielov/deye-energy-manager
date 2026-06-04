@@ -5,6 +5,7 @@ from __future__ import annotations
 from .context import DecisionContext
 from .strategies.balanced import BalancedStrategy
 from .strategies.backup import BackupStrategy
+from .strategies.balancing import BalancingStrategy
 from .strategies.eco import EcoStrategy
 from ..const import EnergyMode
 from ..models import Plan
@@ -13,6 +14,7 @@ from ..models import Plan
 _STRATEGIES = {
     EnergyMode.ECO: EcoStrategy,
     EnergyMode.BACKUP: BackupStrategy,
+    EnergyMode.BALANCING: BalancingStrategy,
 }
 
 

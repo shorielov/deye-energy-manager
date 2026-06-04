@@ -39,6 +39,10 @@ def _charge_entity(prefix: str, n: int) -> str:
     return f"switch.{prefix}prog{n}_charge" if prefix else f"switch.prog{n}_charge"
 
 
+def _charge_current_entity(prefix: str, n: int) -> str:
+    return f"number.{prefix}prog{n}_charge_current" if prefix else f"number.prog{n}_charge_current"
+
+
 class SunsynkAdapter(InverterAdapter):
     """Write the Plan to kellerza/sunsynk TOU entities.
 
@@ -68,10 +72,11 @@ class SunsynkAdapter(InverterAdapter):
                 _LOGGER.error("Failed to write Sunsynk slot %d: %s", i, result)
 
     async def _write_slot(self, hass: "HomeAssistant", n: int, slot: object) -> None:
-        """Write time, capacity, and charge for slot *n*."""
+        """Write time, capacity, charge, and optionally charge current for slot *n*."""
         time_str = slot.start_time.strftime("%H:%M")  # type: ignore[attr-defined]
         capacity = slot.target_soc  # type: ignore[attr-defined]
         charge = slot.charge_from_grid  # type: ignore[attr-defined]
+        max_power_w: int | None = slot.max_power_w  # type: ignore[attr-defined]
 
         await hass.services.async_call(
             "time",
@@ -92,6 +97,22 @@ class SunsynkAdapter(InverterAdapter):
             {"entity_id": _charge_entity(self._prefix, n)},
             blocking=True,
         )
+
+        # Best-effort: write charge current when the inverter exposes the entity
+        if max_power_w is not None:
+            current_entity = _charge_current_entity(self._prefix, n)
+            if hass.states.get(current_entity) is not None:
+                try:
+                    voltage_v: float = getattr(self, "_voltage_v", 51.2)
+                    amps = round(max_power_w / voltage_v, 1)
+                    await hass.services.async_call(
+                        "number",
+                        "set_value",
+                        {"entity_id": current_entity, "value": str(amps)},
+                        blocking=True,
+                    )
+                except Exception:  # noqa: BLE001
+                    _LOGGER.debug("Could not set charge current for slot %d", n)
 
     @classmethod
     def is_available(cls, hass: "HomeAssistant") -> bool:

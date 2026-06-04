@@ -90,7 +90,8 @@
         "winter": "Winter",
         "autonomous": "Autonomous",
         "backup": "Backup",
-        "balanced": "Balanced"
+        "balanced": "Balanced",
+        "balancing": "Battery Balancing"
       }
     },
     "inverter_adapter": {
@@ -120,6 +121,7 @@
       "plan_slot_4_target_soc": {"name": "Plan Slot 4 Target SOC"},
       "plan_slot_5_start": {"name": "Plan Slot 5 Start"},
       "plan_slot_5_target_soc": {"name": "Plan Slot 5 Target SOC"},
+      "balancing_status": {"name": "Balancing Status"},
       "plan_slot_6_start": {"name": "Plan Slot 6 Start"},
       "plan_slot_6_target_soc": {"name": "Plan Slot 6 Target SOC"}
     },
@@ -137,11 +139,16 @@
     "switch": {
       "eco_mode": {"name": "ECO Mode"},
       "winter_mode": {"name": "Winter Mode"},
+      "balancing_mode": {"name": "Battery Balancing Mode"},
       "auto_apply": {"name": "Auto Apply Recommendations"}
     },
     "number": {
       "target_soc": {"name": "Target SOC Override"},
       "min_soc": {"name": "Minimum SOC Override"}
+    },
+    "button": {
+      "start_balance": {"name": "Start Battery Balancing"},
+      "cancel_balance": {"name": "Cancel Battery Balancing"}
     }
   }
 }

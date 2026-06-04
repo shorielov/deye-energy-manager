@@ -24,6 +24,7 @@ from .const import (
     ATTR_SMART_LOAD_TODAY_KWH,
     ATTR_TODAY_LOAD_KWH,
     DOMAIN,
+    RecommendationCode,
 )
 from .coordinator import SmartEnergyCoordinator
 from .entity import SmartEnergyEntity
@@ -75,6 +76,16 @@ SENSORS: tuple[SmartEnergySensorDescription, ...] = (
         name="Energy Score",
         native_unit_of_measurement=PERCENTAGE,
         value_fn=lambda state: _energy_score(state),
+    ),
+    SmartEnergySensorDescription(
+        key="balancing_status",
+        name="Balancing Status",
+        value_fn=lambda state: _balancing_status(state),
+        extra_attrs_fn=lambda state: {
+            "balance_imbalance": state.balance_imbalance,
+            "balance_requested": state.balance_requested,
+            "balance_last_run": state.balance_last_run.isoformat() if state.balance_last_run is not None else None,  # type: ignore[union-attr]
+        },
     ),
 )
 
@@ -159,6 +170,25 @@ def _energy_score(state: EnergyState) -> float | None:
     if dependency is None:
         return None
     return round(100 - dependency, 1)
+
+
+_BALANCING_CODE_STATUS: dict[str, str] = {
+    RecommendationCode.BALANCING_ACTIVE: "active",
+    RecommendationCode.BALANCING_SCHEDULED_NIGHT: "scheduled",
+    RecommendationCode.BALANCING_POSTPONED_PV: "postponed",
+    RecommendationCode.BALANCING_IDLE: "idle",
+    RecommendationCode.BALANCING_COOLDOWN: "cooldown",
+}
+
+
+def _balancing_status(state: EnergyState) -> str:
+    """Derive balancing status from the active plan's slot reason codes."""
+    if state.plan is not None and state.plan.strategy == "balancing":
+        for slot in state.plan.slots:
+            mapped = _BALANCING_CODE_STATUS.get(slot.reason)  # type: ignore[arg-type]
+            if mapped:
+                return mapped
+    return "idle"
 
 
 # ---------------------------------------------------------------------------

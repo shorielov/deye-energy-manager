@@ -33,6 +33,10 @@ def _charging_entity(slug: str, n: int) -> str:
     return f"select.{slug}_program_{n}_charging"
 
 
+def _charge_current_entity(slug: str, n: int) -> str:
+    return f"number.{slug}_program_{n}_charge_current"
+
+
 class SolarmanAdapter(InverterAdapter):
     """Write the Plan to davidrapan/ha-solarman TOU entities.
 
@@ -50,6 +54,7 @@ class SolarmanAdapter(InverterAdapter):
 
     def __init__(self, device_name: str = "inverter") -> None:
         self._slug = device_name.strip().lower().replace(" ", "_") if device_name else "inverter"
+        self._voltage_v: float = 51.2
 
     async def async_apply_plan(self, hass: "HomeAssistant", plan: "Plan") -> None:
         """Write all 6 plan slots to the inverter in parallel."""
@@ -62,10 +67,11 @@ class SolarmanAdapter(InverterAdapter):
                 _LOGGER.error("Failed to write Solarman slot %d: %s", i, result)
 
     async def _write_slot(self, hass: "HomeAssistant", n: int, slot: object) -> None:
-        """Write time, SoC, and charging-mode for slot *n*."""
+        """Write time, SoC, charging-mode, and optionally charge current for slot *n*."""
         time_str = slot.start_time.strftime("%H:%M")  # type: ignore[attr-defined]
         soc = slot.target_soc  # type: ignore[attr-defined]
         charge = slot.charge_from_grid  # type: ignore[attr-defined]
+        max_power_w: int | None = slot.max_power_w  # type: ignore[attr-defined]
 
         await hass.services.async_call(
             "time",
@@ -85,6 +91,23 @@ class SolarmanAdapter(InverterAdapter):
             {"entity_id": _charging_entity(self._slug, n), "option": "Grid" if charge else "Disabled"},
             blocking=True,
         )
+
+        # Best-effort: write charge current when the inverter exposes the entity
+        if max_power_w is not None:
+            current_entity = _charge_current_entity(self._slug, n)
+            if hass.states.get(current_entity) is not None:
+                try:
+                    # Default battery voltage 51.2 V; W → A rounded to 1 decimal
+                    voltage_v: float = getattr(self, "_voltage_v", 51.2)
+                    amps = round(max_power_w / voltage_v, 1)
+                    await hass.services.async_call(
+                        "number",
+                        "set_value",
+                        {"entity_id": current_entity, "value": str(amps)},
+                        blocking=True,
+                    )
+                except Exception:  # noqa: BLE001
+                    _LOGGER.debug("Could not set charge current for slot %d", n)
 
     @classmethod
     def is_available(cls, hass: "HomeAssistant") -> bool:

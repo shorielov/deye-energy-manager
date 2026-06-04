@@ -52,6 +52,20 @@ class BatteryConfig:
 
 
 @dataclass(slots=True)
+class BalanceConfig:
+    """Battery balancing configuration."""
+
+    trigger_threshold: float = 0.05
+    stop_threshold: float = 0.02
+    max_charge_w: int = 2000
+    target_soc: int = 100
+    allow_grid: bool = True
+    max_runtime_h: int = 6
+    cooldown_days: int = 14
+    voltage_v: float = 51.2
+
+
+@dataclass(slots=True)
 class TelemetrySnapshot:
     """Normalized telemetry values from Home Assistant entities."""
 
@@ -116,3 +130,6 @@ class EnergyState:
     battery: BatteryConfig
     last_update_success: bool = True
     plan: Plan | None = None
+    balance_requested: bool = False
+    balance_imbalance: float | None = None
+    balance_last_run: object | None = None  # datetime, typed as object for purity

@@ -70,6 +70,25 @@ SERVICE_RECOMPUTE = "recompute"
 SERVICE_CLEAR_HISTORY = "clear_history"
 SERVICE_SET_MODE = "set_mode"
 
+CONF_BALANCE_IMBALANCE_ENTITY = "balance_imbalance_entity"
+CONF_BALANCE_TRIGGER_THRESHOLD = "balance_trigger_threshold"
+CONF_BALANCE_STOP_THRESHOLD = "balance_stop_threshold"
+CONF_BALANCE_MAX_CHARGE_W = "balance_max_charge_w"
+CONF_BALANCE_TARGET_SOC = "balance_target_soc"
+CONF_BALANCE_ALLOW_GRID = "balance_allow_grid"
+CONF_BALANCE_MAX_RUNTIME_H = "balance_max_runtime_h"
+CONF_BALANCE_COOLDOWN_DAYS = "balance_cooldown_days"
+CONF_BALANCE_VOLTAGE_V = "balance_voltage_v"
+
+DEFAULT_BALANCE_TRIGGER_THRESHOLD = 0.05
+DEFAULT_BALANCE_STOP_THRESHOLD = 0.02
+DEFAULT_BALANCE_MAX_CHARGE_W = 2000
+DEFAULT_BALANCE_TARGET_SOC = 100
+DEFAULT_BALANCE_ALLOW_GRID = True
+DEFAULT_BALANCE_MAX_RUNTIME_H = 6
+DEFAULT_BALANCE_COOLDOWN_DAYS = 14
+DEFAULT_BALANCE_VOLTAGE_V = 51.2
+
 
 class EnergyMode(StrEnum):
     """Supported strategy modes."""
@@ -79,6 +98,7 @@ class EnergyMode(StrEnum):
     AUTONOMOUS = "autonomous"
     BACKUP = "backup"
     BALANCED = "balanced"
+    BALANCING = "balancing"
 
 
 class TariffType(StrEnum):
@@ -118,3 +138,8 @@ class RecommendationCode(StrEnum):
     NO_GRID_CHARGE = "no_grid_charge"
     BACKUP_MODE = "backup_mode"
     INSUFFICIENT_DEFICIT = "insufficient_deficit"
+    BALANCING_ACTIVE = "balancing_active"
+    BALANCING_POSTPONED_PV = "balancing_postponed_pv"
+    BALANCING_SCHEDULED_NIGHT = "balancing_scheduled_night"
+    BALANCING_IDLE = "balancing_idle"
+    BALANCING_COOLDOWN = "balancing_cooldown"
