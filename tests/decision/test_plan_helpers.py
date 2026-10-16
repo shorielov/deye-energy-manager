@@ -69,6 +69,32 @@ class TestCollapseToSix:
             assert s.target_soc == 70
             assert s.charge_from_grid is True
 
+    def test_padding_preserves_each_interval(self):
+        """Adding slots must not change charge, SOC, power or reason at any minute."""
+        slots = [_slot(0, 90, True), _slot(7, 40), _slot(17, 20)]
+        slots[0].max_power_w = 2000
+        slots[0].reason = RecommendationCode.CHEAP_TARIFF
+        result = collapse_to_six(slots)
+        for minute in range(24 * 60):
+            now = time(minute // 60, minute % 60)
+            before = [s for s in slots if s.start_time <= now][-1]
+            after = [s for s in result if s.start_time <= now][-1]
+            assert (after.target_soc, after.charge_from_grid, after.max_power_w, after.reason) == (
+                before.target_soc, before.charge_from_grid, before.max_power_w, before.reason
+            ), now
+
+    def test_padding_before_first_slot_preserves_wraparound(self):
+        slots = [_slot(7, 40), _slot(23, 90, True)]
+        result = collapse_to_six(slots)
+        for minute in range(24 * 60):
+            now = time(minute // 60, minute % 60)
+            before_slots = [s for s in slots if s.start_time <= now]
+            before = before_slots[-1] if before_slots else slots[-1]
+            after = [s for s in result if s.start_time <= now][-1]
+            assert (after.target_soc, after.charge_from_grid) == (
+                before.target_soc, before.charge_from_grid
+            ), now
+
 
 class TestSnapToTouBoundaries:
     def test_flat_no_extra_times(self):

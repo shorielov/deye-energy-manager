@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import pytest
+
+
+def _daily(values: list[float]) -> dict[date, float]:
+    return {date(2026, 10, 1) + timedelta(days=i): value for i, value in enumerate(values)}
 
 from custom_components.smart_energy_manager.consumption_forecast import (
     ConsumptionForecaster,
@@ -106,8 +112,8 @@ class TestConsumptionForecaster:
     async def test_empty_totals_returns_none_zero(
         self, forecaster, monkeypatch
     ) -> None:
-        async def mock_fetch(entity_id: str) -> list[float]:
-            return []
+        async def mock_fetch(entity_id: str) -> dict[date, float]:
+            return {}
 
         monkeypatch.setattr(forecaster, "_fetch_daily_totals", mock_fetch)
         tomorrow, confidence = await forecaster.async_estimate(
@@ -124,8 +130,8 @@ class TestConsumptionForecaster:
         smart = [3.0, 2.0, 4.0, 3.5, 2.5, 3.2, 3.8]
         # baseline per day = [12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0]
 
-        async def mock_fetch(entity_id: str) -> list[float]:
-            return total if "total" in entity_id else smart
+        async def mock_fetch(entity_id: str) -> dict[date, float]:
+            return _daily(total if "total" in entity_id else smart)
 
         monkeypatch.setattr(forecaster, "_fetch_daily_totals", mock_fetch)
         tomorrow, confidence = await forecaster.async_estimate(
@@ -140,8 +146,8 @@ class TestConsumptionForecaster:
         smart = [2.0, 4.0]
         # baseline = [12.0, 12.0]
 
-        async def mock_fetch(entity_id: str) -> list[float]:
-            return total if "total" in entity_id else smart
+        async def mock_fetch(entity_id: str) -> dict[date, float]:
+            return _daily(total if "total" in entity_id else smart)
 
         monkeypatch.setattr(forecaster, "_fetch_daily_totals", mock_fetch)
         tomorrow, confidence = await forecaster.async_estimate(
@@ -156,8 +162,8 @@ class TestConsumptionForecaster:
     ) -> None:
         total = [12.0, 13.0, 11.0, 14.0, 12.5, 11.5, 12.0]
 
-        async def mock_fetch(entity_id: str) -> list[float]:
-            return total
+        async def mock_fetch(entity_id: str) -> dict[date, float]:
+            return _daily(total)
 
         monkeypatch.setattr(forecaster, "_fetch_daily_totals", mock_fetch)
         tomorrow, confidence = await forecaster.async_estimate(
@@ -174,8 +180,8 @@ class TestConsumptionForecaster:
         total = [10.0, 10.0, 10.0]
         smart = [15.0, 15.0, 15.0]  # smart > total every day → baseline = 0
 
-        async def mock_fetch(entity_id: str) -> list[float]:
-            return total if "total" in entity_id else smart
+        async def mock_fetch(entity_id: str) -> dict[date, float]:
+            return _daily(total if "total" in entity_id else smart)
 
         monkeypatch.setattr(forecaster, "_fetch_daily_totals", mock_fetch)
         tomorrow, confidence = await forecaster.async_estimate(
@@ -189,10 +195,10 @@ class TestConsumptionForecaster:
     async def test_cache_avoids_second_fetch(self, forecaster, monkeypatch) -> None:
         call_count = 0
 
-        async def mock_fetch(entity_id: str) -> list[float]:
+        async def mock_fetch(entity_id: str) -> dict[date, float]:
             nonlocal call_count
             call_count += 1
-            return [12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0]
+            return _daily([12.0] * 7)
 
         monkeypatch.setattr(forecaster, "_fetch_daily_totals", mock_fetch)
 
@@ -209,10 +215,10 @@ class TestConsumptionForecaster:
     ) -> None:
         call_count = 0
 
-        async def mock_fetch(entity_id: str) -> list[float]:
+        async def mock_fetch(entity_id: str) -> dict[date, float]:
             nonlocal call_count
             call_count += 1
-            return [12.0] * 7
+            return _daily([12.0] * 7)
 
         monkeypatch.setattr(forecaster, "_fetch_daily_totals", mock_fetch)
 
