@@ -122,6 +122,15 @@ class TestBalancedDualLargeDeficit:
         times = [s.start_time for s in plan.slots]
         assert times == sorted(times)
 
+    def test_charge_covers_entire_overnight_window(self):
+        """The evening start must survive the midnight wrap and six-slot limit."""
+        plan = strategy.evaluate(self._dual_large())
+        for minute in range(24 * 60):
+            now = time(minute // 60, minute % 60)
+            preceding = [slot for slot in plan.slots if slot.start_time <= now]
+            active = preceding[-1] if preceding else plan.slots[-1]
+            assert active.charge_from_grid == (now >= time(23) or now < time(7)), now
+
 
 class TestBalancedSlotContents:
     def test_all_slots_have_valid_soc(self):

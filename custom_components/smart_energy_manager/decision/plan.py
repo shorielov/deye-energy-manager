@@ -49,7 +49,6 @@ def collapse_to_six(slots: list[PlanSlot]) -> list[PlanSlot]:
     # ---- pad ----
     if len(merged) < 6:
         used_hours = {s.start_time.hour for s in merged}
-        last = merged[-1]
         # Distribute padding evenly: try 0, 4, 8, 12, 16, 20 first, then hours 2..23
         candidates = [0, 4, 8, 12, 16, 20, 2, 6, 10, 14, 18, 22, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23]
         for h in candidates:
@@ -57,13 +56,17 @@ def collapse_to_six(slots: list[PlanSlot]) -> list[PlanSlot]:
                 break
             if h not in used_hours:
                 used_hours.add(h)
+                # Split the active interval without changing its settings.
+                # Before the first boundary, the previous day's final slot applies.
+                preceding = [s for s in merged if _slot_minutes(s) < h * 60]
+                active = max(preceding or merged, key=_slot_minutes)
                 merged.append(
                     PlanSlot(
                         start_time=time(h, 0),
-                        target_soc=last.target_soc,
-                        charge_from_grid=last.charge_from_grid,
-                        max_power_w=last.max_power_w,
-                        reason=last.reason,
+                        target_soc=active.target_soc,
+                        charge_from_grid=active.charge_from_grid,
+                        max_power_w=active.max_power_w,
+                        reason=active.reason,
                     )
                 )
         merged.sort(key=_slot_minutes)

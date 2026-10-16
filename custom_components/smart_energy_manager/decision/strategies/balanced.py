@@ -104,8 +104,8 @@ class BalancedStrategy(Strategy):
                 PlanSlot(sunset_minus1, ctx.min_soc, False, None, RecommendationCode.HIGH_CONSUMPTION),
             ]
 
-            if not midnight_is_cheap:
-                # Cheap window starts mid-day or evening (unusual but supported)
+            if night_start != time(0, 0):
+                # Include the evening start when the cheap window spans midnight too.
                 slots.append(
                     PlanSlot(night_start, 100, True, None, RecommendationCode.CHEAP_TARIFF)
                 )
