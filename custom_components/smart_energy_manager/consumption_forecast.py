@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import math
 import statistics
-from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from datetime import UTC, date, datetime, timedelta
+from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -15,6 +17,42 @@ _LOGGER = logging.getLogger(__name__)
 HISTORY_DAYS = 14
 MIN_DAYS_FOR_MEDIAN = 3
 CACHE_TTL_SECONDS = 3600
+
+
+def _daily_totals_from_statistics(
+    rows: list[dict[str, Any]], start: datetime, end: datetime,
+) -> dict[date, float]:
+    """Compute complete local days from Recorder's hourly cumulative sums.
+
+    A row's sum is the cumulative value at the END of its hour. Include the
+    hour before start as an anchor. Missing/invalid hours invalidate that day;
+    do not spread energy across gaps or mistake daily state resets for usage.
+    Local midnight boundaries allow 23/25-hour DST days.
+    """
+    sums: dict[float, float] = {}
+    for row in rows:
+        timestamp, value = row.get("start"), row.get("sum")
+        if timestamp is None or value is None:
+            continue
+        timestamp, value = float(timestamp), float(value)
+        if math.isfinite(timestamp) and math.isfinite(value):
+            sums[timestamp] = value
+
+    totals: dict[date, float] = {}
+    day = start
+    while day < end:
+        next_day = day + timedelta(days=1)
+        first, stop = day.timestamp(), next_day.timestamp()
+        deltas = []
+        for timestamp in range(int(first), int(stop), 3600):
+            current, previous = sums.get(timestamp), sums.get(timestamp - 3600)
+            if current is None or previous is None or current < previous - 1e-6:
+                break
+            deltas.append(max(current - previous, 0.0))
+        else:
+            totals[day.date()] = round(sum(deltas), 3)
+        day = next_day
+    return totals
 
 
 def _compute_baseline_series(
@@ -113,23 +151,31 @@ class ConsumptionForecaster:
         smart_series = (
             await self._fetch_daily_totals(smart_load_entity)
             if smart_load_entity
-            else []
+            else None
         )
 
-        baseline = _compute_baseline_series(total_series, smart_series)
+        # Each sensor may have different missing days. Align by date, not index;
+        # an unknown smart-load day must not be silently treated as zero.
+        days = sorted(total_series)
+        if smart_series is not None:
+            days = [day for day in days if day in smart_series]
+        baseline = _compute_baseline_series(
+            [total_series[day] for day in days],
+            [smart_series[day] for day in days] if smart_series is not None else [],
+        )
         result = _forecast_from_series(baseline)
 
         self._cache[cache_key] = (result, now + timedelta(seconds=CACHE_TTL_SECONDS))
         return result
 
-    async def _fetch_daily_totals(self, entity_id: str) -> list[float]:
-        """Return a list of daily consumption totals (kWh) via Recorder statistics.
+    async def _fetch_daily_totals(self, entity_id: str) -> dict[date, float]:
+        """Return complete local-day consumption totals (kWh), keyed by date.
 
-        Uses the ``max`` statistic for each day, which equals the end-of-day
-        accumulated value for daily-reset energy sensors (e.g. Deye
-        *Today Load Consumption*).
+        Energy sensors with state_class total_increasing provide cumulative
+        ``sum`` statistics, not ``max``. Differences between adjacent hourly
+        sums give consumption, including across daily sensor state resets.
 
-        Returns an empty list when the Recorder is unavailable or has no
+        Returns an empty mapping when the Recorder is unavailable or has no
         data for the entity.
         """
 
@@ -140,32 +186,28 @@ class ConsumptionForecaster:
             )
         except ImportError:
             _LOGGER.debug("Recorder component not available; skipping statistics fetch")
-            return []
+            return {}
 
-        end = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        local_tz = ZoneInfo(self._hass.config.time_zone)
+        end = datetime.now(local_tz).replace(hour=0, minute=0, second=0, microsecond=0)
         start = end - timedelta(days=HISTORY_DAYS)
 
-        def _fetch() -> list[float]:
+        def _fetch() -> dict[date, float]:
             stats: dict = statistics_during_period(  # type: ignore[type-arg]
                 self._hass,
-                start_time=start,
-                end_time=end,
+                start_time=start.astimezone(UTC) - timedelta(hours=1),
+                end_time=end.astimezone(UTC),
                 statistic_ids={entity_id},
-                period="day",
+                period="hour",
                 units={"energy": "kWh"},
-                types={"max"},
+                types={"sum"},
             )
             rows = stats.get(entity_id, [])
-            result: list[float] = []
-            for row in rows:
-                val = row.get("max")
-                if val is not None and val >= 0:
-                    result.append(round(float(val), 3))
-            return result
+            return _daily_totals_from_statistics(rows, start, end)
 
         try:
             instance = get_instance(self._hass)
             return await instance.async_add_executor_job(_fetch)
         except Exception:
             _LOGGER.exception("Failed to fetch recorder statistics for %s", entity_id)
-            return []
+            return {}
